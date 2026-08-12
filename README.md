@@ -2,6 +2,8 @@
 
 YouTube Shorts／長尺Mix向けのBGMをローカル生成・評価し、動画のPrivate投稿と実績収集を行うWindowsサーバーシステムです。
 
+映像はBGMに合う実写・環境クリップを選び、曲切替と同期して編集する設計です。詳細は [`docs/visual-video-pipeline.md`](docs/visual-video-pipeline.md) を参照してください。
+
 ## 配置
 
 | 用途 | パス |
