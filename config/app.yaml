@@ -78,5 +78,6 @@ youtube:
   region: JP
   category_id: 10
   upload_privacy: private
+  contains_synthetic_media: true
   expected_channel_id:
   upload_poll_minutes: 15

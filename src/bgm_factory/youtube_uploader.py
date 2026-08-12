@@ -93,6 +93,7 @@ def upload_video(
         "status": {
             "privacyStatus": video.privacy_status,
             "selfDeclaredMadeForKids": False,
+            "containsSyntheticMedia": config.youtube.contains_synthetic_media,
         },
     }
     media_type = mimetypes.guess_type(file_path.name)[0] or "video/*"

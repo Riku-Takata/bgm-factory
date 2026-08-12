@@ -304,6 +304,20 @@ BGMだけでなく映像の影響を分離して記録する。
 
 同じBGMを異なる映像で試す場合も、短期間に類似動画を大量投稿せず、少数のPrivate確認後に間隔を空けて比較する。
 
+### 8.1 オリジナリティ判定
+
+Pexels素材は「完成動画」ではなく編集素材としてのみ扱う。ダウンロードした映像を並べてBGMを載せるだけの動画は禁止する。YouTubeの量産・反復コンテンツおよび再利用コンテンツ方針を踏まえ、次をVideo QAへ含める。
+
+- 映像にThemeごとの起承転結または時間・場所・色の進行がある
+- BGMのHookと映像上の動きが同期している
+- クロップ、速度、色、トランジション、タイトル演出が素材ごとに設計されている
+- 同じScene構成、タイトル文、映像順をテンプレート量産しない
+- Stock映像だけに依存せず、将来的に自前撮影素材とオリジナル生成素材の比率を上げる
+- `AuthenticityScore`が閾値未満なら自動公開しない
+- 最初の20本はPrivateで人間が映像の独自性を確認する
+
+YouTubeは、許諾があっても実質的な変更や独自価値が乏しい再利用コンテンツ、および大量生産された類似テンプレートを収益化対象外にする場合がある。そのため、Pexelsの利用許諾確認とYouTube上のオリジナリティ判定は別のQuality Gateとして扱う。
+
 ## 9. AI生成映像の扱い
 
 初期標準では無効とする。
@@ -343,3 +357,4 @@ BGMだけでなく映像の影響を分離して記録する。
 - Wan2.1公式リポジトリ: https://github.com/Wan-Video/Wan2.1
 - YouTube altered／synthetic content: https://support.google.com/youtube/answer/14328491
 - YouTube Video resource `containsSyntheticMedia`: https://developers.google.com/youtube/v3/docs/videos
+- YouTube Channel Monetization Policies: https://support.google.com/youtube/answer/1311392

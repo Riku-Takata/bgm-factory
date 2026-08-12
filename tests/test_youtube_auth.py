@@ -40,3 +40,7 @@ def test_credential_paths_stay_under_config_secrets(tmp_path) -> None:
 
     assert client == tmp_path / "secrets" / "client_secret.json"
     assert token == tmp_path / "secrets" / "token.json"
+
+
+def test_youtube_defaults_disclose_synthetic_media() -> None:
+    assert AppConfig().youtube.contains_synthetic_media is True

@@ -86,6 +86,7 @@ class YouTubeSettings(BaseModel):
     region: str = "JP"
     category_id: int = 10
     upload_privacy: str = "private"
+    contains_synthetic_media: bool = True
     expected_channel_id: str | None = None
     upload_poll_minutes: int = Field(default=15, ge=1, le=1440)
     client_secret_file: str = "client_secret.json"
