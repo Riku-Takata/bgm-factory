@@ -145,6 +145,33 @@ CREATE TABLE IF NOT EXISTS youtube_metrics_daily (
     collected_at TEXT NOT NULL,
     PRIMARY KEY(youtube_video_id, metric_date)
 );
+
+CREATE TABLE IF NOT EXISTS pexels_assets (
+    id TEXT PRIMARY KEY,
+    theme TEXT NOT NULL,
+    search_query TEXT NOT NULL,
+    pexels_video_id INTEGER NOT NULL UNIQUE,
+    pexels_file_id INTEGER NOT NULL,
+    local_file TEXT NOT NULL,
+    content_hash TEXT NOT NULL UNIQUE,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    duration_sec REAL NOT NULL,
+    fps REAL,
+    photographer TEXT NOT NULL,
+    photographer_url TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    license_name TEXT NOT NULL,
+    license_url TEXT NOT NULL,
+    attribution_text TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT,
+    use_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_pexels_assets_theme
+ON pexels_assets(theme, use_count, created_at);
 """
 
 
@@ -340,6 +367,70 @@ class Repository:
             rows = connection.execute(
                 "SELECT * FROM generation_jobs ORDER BY created_at DESC LIMIT ?", (limit,)
             ).fetchall()
+            return [dict(row) for row in rows]
+
+    def upsert_pexels_asset(self, values: dict[str, Any]) -> str:
+        asset_id = values.get("id") or f"pexels_{values['pexels_video_id']}"
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO pexels_assets (
+                    id, theme, search_query, pexels_video_id, pexels_file_id,
+                    local_file, content_hash, width, height, duration_sec, fps,
+                    photographer, photographer_url, source_url, file_url,
+                    license_name, license_url, attribution_text, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(pexels_video_id) DO UPDATE SET
+                    local_file = excluded.local_file,
+                    content_hash = excluded.content_hash,
+                    pexels_file_id = excluded.pexels_file_id,
+                    width = excluded.width,
+                    height = excluded.height,
+                    fps = excluded.fps
+                """,
+                (
+                    asset_id,
+                    values["theme"],
+                    values["search_query"],
+                    values["pexels_video_id"],
+                    values["pexels_file_id"],
+                    values["local_file"],
+                    values["content_hash"],
+                    values["width"],
+                    values["height"],
+                    values["duration_sec"],
+                    values.get("fps"),
+                    values["photographer"],
+                    values["photographer_url"],
+                    values["source_url"],
+                    values["file_url"],
+                    values["license_name"],
+                    values["license_url"],
+                    values["attribution_text"],
+                    values.get("created_at", utc_now()),
+                ),
+            )
+        return str(asset_id)
+
+    def pexels_asset_ids(self) -> set[int]:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT pexels_video_id FROM pexels_assets").fetchall()
+            return {int(row["pexels_video_id"]) for row in rows}
+
+    def pexels_assets(self, theme: str | None = None) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            if theme:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM pexels_assets WHERE theme = ?
+                    ORDER BY use_count, created_at
+                    """,
+                    (theme,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT * FROM pexels_assets ORDER BY theme, use_count, created_at"
+                ).fetchall()
             return [dict(row) for row in rows]
 
     def register_video(self, values: dict[str, Any]) -> str:

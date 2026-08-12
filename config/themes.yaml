@@ -1,5 +1,11 @@
 summer_drive:
   display_name: Summer Drive
+  video_queries:
+    - coastal road driving
+    - ocean sunlight
+    - palm tree road
+    - sunset highway
+    - neon city driving
   bpm: {min: 118, max: 132}
   energy: {min: 0.70, max: 0.95}
   keywords:
@@ -13,6 +19,7 @@ summer_drive:
 
 night_drive:
   display_name: Night Drive
+  video_queries: [neon city driving, highway at night, rainy city road]
   bpm: {min: 105, max: 128}
   energy: {min: 0.55, max: 0.85}
   keywords: [night drive, neon atmosphere, steady rhythm, warm synth bass]
@@ -20,8 +27,8 @@ night_drive:
 
 chill:
   display_name: Chill
+  video_queries: [calm ocean, forest sunlight, slow clouds]
   bpm: {min: 75, max: 105}
   energy: {min: 0.30, max: 0.60}
   keywords: [soft groove, warm texture, relaxed, seamless instrumental loop]
   avoid: [vocals, aggressive drums, dramatic ending]
-

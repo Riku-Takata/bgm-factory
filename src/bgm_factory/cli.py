@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .pexels import fetch_theme_assets
 from .prompt import build_prompt
 from .runtime import initialize_runtime
 from .service import process_next_job
@@ -48,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--tag", action="append", default=[])
     render.add_argument("--theme", default=None)
     render.add_argument("--register", action="store_true")
+    pexels_fetch = commands.add_parser(
+        "pexels-fetch", help="cache portrait stock videos and their attribution metadata"
+    )
+    pexels_fetch.add_argument("--theme", default=None)
+    pexels_fetch.add_argument("--limit", type=int, default=5)
+    pexels_fetch.add_argument("--per-query", type=int, default=12)
     commands.add_parser("youtube-collect", help="collect YouTube statistics and Analytics")
     return parser
 
@@ -129,6 +136,36 @@ def main() -> None:
         print(
             json.dumps(
                 {"output": str(args.output.resolve()), "probe": probe.__dict__, "video_id": video_id},
+                indent=2,
+            )
+        )
+        return
+    if args.command == "pexels-fetch":
+        theme = args.theme or config.generation.default_theme
+        assets = fetch_theme_assets(
+            paths,
+            config,
+            repository,
+            theme=theme,
+            limit=args.limit,
+            per_query=args.per_query,
+        )
+        print(
+            json.dumps(
+                {
+                    "theme": theme,
+                    "downloaded": len(assets),
+                    "assets": [
+                        {
+                            "id": asset.id,
+                            "local_file": asset.local_file,
+                            "query": asset.search_query,
+                            "attribution": asset.attribution_text,
+                        }
+                        for asset in assets
+                    ],
+                },
+                ensure_ascii=False,
                 indent=2,
             )
         )

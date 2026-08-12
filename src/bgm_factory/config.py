@@ -82,6 +82,17 @@ class DashboardSettings(BaseModel):
     port: int = Field(default=8787, ge=1, le=65535)
 
 
+class PexelsSettings(BaseModel):
+    enabled: bool = True
+    api_key_env: str = "PEXELS_API_KEY"
+    min_width: int = Field(default=720, ge=320)
+    min_height: int = Field(default=1280, ge=480)
+    min_duration_sec: int = Field(default=8, ge=1, le=600)
+    max_duration_sec: int = Field(default=90, ge=1, le=3600)
+    max_download_mb: int = Field(default=150, ge=1, le=1000)
+    request_timeout_sec: float = Field(default=30, ge=1, le=300)
+
+
 class YouTubeSettings(BaseModel):
     region: str = "JP"
     category_id: int = 10
@@ -105,6 +116,7 @@ class AppConfig(BaseModel):
     schedule: ScheduleSettings = ScheduleSettings()
     analytics: AnalyticsSettings = AnalyticsSettings()
     dashboard: DashboardSettings = DashboardSettings()
+    pexels: PexelsSettings = PexelsSettings()
     shorts: dict = {}
     long_mix: dict = {}
     youtube: YouTubeSettings = YouTubeSettings()

@@ -40,6 +40,7 @@ class ServerPaths:
             self.data_root / "generated" / "rejected",
             self.data_root / "assets",
             self.data_root / "visual-assets",
+            self.data_root / "visual-assets" / "pexels",
             self.data_root / "shorts",
             self.data_root / "longmix",
             self.data_root / "temp",

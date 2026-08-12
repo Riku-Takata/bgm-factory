@@ -70,3 +70,32 @@ def test_dashboard_data_defaults_to_zero(tmp_path: Path) -> None:
 
     assert data["totals"] == {"views": 0, "likes": 0, "comments": 0}
     assert data["videos"] == []
+
+
+def test_pexels_asset_metadata_is_idempotent(tmp_path: Path) -> None:
+    repository = Repository(tmp_path / "factory.sqlite")
+    repository.migrate()
+    values = {
+        "theme": "summer_drive",
+        "search_query": "coastal road",
+        "pexels_video_id": 123,
+        "pexels_file_id": 456,
+        "local_file": str(tmp_path / "clip.mp4"),
+        "content_hash": hashlib.sha256(b"clip").hexdigest(),
+        "width": 1080,
+        "height": 1920,
+        "duration_sec": 12.0,
+        "fps": 30.0,
+        "photographer": "Creator",
+        "photographer_url": "https://www.pexels.com/@creator",
+        "source_url": "https://www.pexels.com/video/123",
+        "file_url": "https://videos.pexels.com/clip.mp4",
+        "license_name": "Pexels License",
+        "license_url": "https://www.pexels.com/license/",
+        "attribution_text": "Video by Creator on Pexels",
+    }
+
+    assert repository.upsert_pexels_asset(values) == "pexels_123"
+    assert repository.upsert_pexels_asset(values) == "pexels_123"
+    assert repository.pexels_asset_ids() == {123}
+    assert len(repository.pexels_assets("summer_drive")) == 1

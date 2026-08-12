@@ -69,6 +69,20 @@ fade, track labeling, and a supporting waveform. Add `--register` to place the
 validated output in the private YouTube upload queue. Upload remains a separate
 explicit step through `youtube-upload-next --confirm-private`.
 
+### Pexels stock-video cache
+
+Put `PEXELS_API_KEY` in `D:\HomeServer\config\bgm-factory\.env`, then cache one
+portrait clip for each configured scene query:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe pexels-fetch `
+  --theme summer_drive --limit 5
+```
+
+Clips are stored outside Git under `visual-assets\pexels`. Each clip has a
+`metadata.json` sidecar, and its Pexels ID, contributor, source page, license,
+download URL, dimensions, duration, and SHA-256 are also recorded in SQLite.
+
 動画はSHA-256で重複判定します。アップロード結果が不明な場合は `uncertain` で停止し、自動再投稿しません。`auto_upload: true` にすると15分ごとに登録済み動画を1本ずつPrivate投稿します。`auto_publish` は初期状態では無効です。
 
 ## Analytics

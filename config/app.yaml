@@ -74,6 +74,16 @@ dashboard:
   host: 127.0.0.1
   port: 8787
 
+pexels:
+  enabled: true
+  api_key_env: PEXELS_API_KEY
+  min_width: 720
+  min_height: 1280
+  min_duration_sec: 8
+  max_duration_sec: 90
+  max_download_mb: 150
+  request_timeout_sec: 30
+
 youtube:
   region: JP
   category_id: 10
