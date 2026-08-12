@@ -61,6 +61,14 @@ D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe video-register `
 D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-upload-next --confirm-private
 ```
 
+### Visual Short rendering
+
+`short-render` builds a 40-second, 1080x1920 Short from exactly five image, audio,
+and label sets. Each scene receives slow camera movement, a synchronized cut and
+fade, track labeling, and a supporting waveform. Add `--register` to place the
+validated output in the private YouTube upload queue. Upload remains a separate
+explicit step through `youtube-upload-next --confirm-private`.
+
 動画はSHA-256で重複判定します。アップロード結果が不明な場合は `uncertain` で停止し、自動再投稿しません。`auto_upload: true` にすると15分ごとに登録済み動画を1本ずつPrivate投稿します。`auto_publish` は初期状態では無効です。
 
 ## Analytics

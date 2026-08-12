@@ -7,6 +7,7 @@ from pathlib import Path
 from .prompt import build_prompt
 from .runtime import initialize_runtime
 from .service import process_next_job
+from .short_renderer import ShortScene, render_short
 from .youtube_analytics import collect_youtube_analytics
 from .youtube_auth import authorization_summary, authorize, connection_status
 from .youtube_uploader import register_video, upload_next
@@ -36,6 +37,17 @@ def build_parser() -> argparse.ArgumentParser:
     register.add_argument("--theme", default=None)
     upload = commands.add_parser("youtube-upload-next", help="upload one video as private")
     upload.add_argument("--confirm-private", action="store_true", required=True)
+    render = commands.add_parser("short-render", help="render a five-scene vertical Short")
+    render.add_argument("--image", action="append", type=Path, required=True)
+    render.add_argument("--audio", action="append", type=Path, required=True)
+    render.add_argument("--label", action="append", required=True)
+    render.add_argument("--audio-start", action="append", type=float, default=[])
+    render.add_argument("--output", type=Path, required=True)
+    render.add_argument("--title", required=True)
+    render.add_argument("--description", default="")
+    render.add_argument("--tag", action="append", default=[])
+    render.add_argument("--theme", default=None)
+    render.add_argument("--register", action="store_true")
     commands.add_parser("youtube-collect", help="collect YouTube statistics and Analytics")
     return parser
 
@@ -88,6 +100,38 @@ def main() -> None:
             raise SystemExit("--confirm-private is required")
         result = upload_next(paths, config, repository)
         print(json.dumps({"uploaded": result}, indent=2))
+        return
+    if args.command == "short-render":
+        if not (len(args.image) == len(args.audio) == len(args.label) == 5):
+            raise SystemExit("Exactly five --image, --audio, and --label arguments are required")
+        starts = args.audio_start or [0.0] * 5
+        if len(starts) != 5:
+            raise SystemExit("Provide either zero or five --audio-start arguments")
+        scenes = [
+            ShortScene(image=image, audio=audio, label=label, audio_start_sec=start)
+            for image, audio, label, start in zip(
+                args.image, args.audio, args.label, starts, strict=True
+            )
+        ]
+        probe = render_short(paths, scenes, args.output)
+        video_id = None
+        if args.register:
+            video_id = register_video(
+                repository,
+                args.output,
+                kind="short",
+                title=args.title,
+                description=args.description,
+                tags=args.tag,
+                theme=args.theme,
+                privacy_status="private",
+            )
+        print(
+            json.dumps(
+                {"output": str(args.output.resolve()), "probe": probe.__dict__, "video_id": video_id},
+                indent=2,
+            )
+        )
         return
     if args.command == "youtube-collect":
         result = collect_youtube_analytics(paths, config, repository)
