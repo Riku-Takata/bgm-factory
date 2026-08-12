@@ -67,8 +67,24 @@ class ScheduleSettings(BaseModel):
     generation_minute: int = Field(default=15, ge=0, le=59)
     production_hour: int = Field(default=6, ge=0, le=23)
     production_minute: int = Field(default=0, ge=0, le=59)
+    production_times: list[str] = ["06:00", "13:00", "20:00"]
     cleanup_hour: int = Field(default=4, ge=0, le=23)
     cleanup_minute: int = Field(default=0, ge=0, le=59)
+
+    def parsed_production_times(self) -> list[tuple[int, int]]:
+        parsed: list[tuple[int, int]] = []
+        for value in self.production_times:
+            try:
+                hour_text, minute_text = value.split(":", maxsplit=1)
+                hour, minute = int(hour_text), int(minute_text)
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid production time: {value!r}") from exc
+            if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+                raise ValueError(f"Invalid production time: {value!r}")
+            parsed.append((hour, minute))
+        if len(set(parsed)) != len(parsed):
+            raise ValueError("Production times must be unique")
+        return parsed or [(self.production_hour, self.production_minute)]
 
 
 class AnalyticsSettings(BaseModel):

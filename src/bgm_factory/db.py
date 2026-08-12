@@ -222,16 +222,21 @@ class Repository:
         return job_id
 
     def enqueue_scheduled_job(
-        self, run_date: date, theme: str, prompt: str, requested_count: int
+        self,
+        run_date: date,
+        theme: str,
+        prompt: str,
+        requested_count: int,
+        schedule_name: str = "daily_generation",
     ) -> str | None:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO schedule_runs(schedule_name, run_date, created_at)
-                VALUES ('daily_generation', ?, ?)
+                VALUES (?, ?, ?)
                 """,
-                (run_date.isoformat(), utc_now()),
+                (schedule_name, run_date.isoformat(), utc_now()),
             )
             if cursor.rowcount == 0:
                 return None

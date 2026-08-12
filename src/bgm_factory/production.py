@@ -56,11 +56,13 @@ THEME_COPY = {
 }
 
 
-def theme_for_date(paths: ServerPaths, config: AppConfig, run_date: date) -> str:
+def theme_for_date(
+    paths: ServerPaths, config: AppConfig, run_date: date, slot: int = 0
+) -> str:
     themes = list(load_yaml(paths, "themes.yaml"))
     if not themes:
         return config.generation.default_theme
-    return themes[run_date.toordinal() % len(themes)]
+    return themes[(run_date.toordinal() + slot) % len(themes)]
 
 
 def production_audio_sources(
@@ -125,9 +127,12 @@ def create_daily_short(
     *,
     run_date: date,
     theme: str | None = None,
+    slot: int = 0,
 ) -> DailyShortResult:
-    theme = theme or theme_for_date(paths, config, run_date)
-    schedule_name = "daily_public_short"
+    if slot < 0:
+        raise ValueError("slot cannot be negative")
+    theme = theme or theme_for_date(paths, config, run_date, slot)
+    schedule_name = f"daily_public_short_{slot:02d}"
     if repository.schedule_run_exists(schedule_name, run_date):
         raise RuntimeError(f"Daily Short already created for {run_date.isoformat()}")
 
@@ -139,7 +144,7 @@ def create_daily_short(
                 repository,
                 theme=theme,
                 limit=config.pexels.daily_downloads,
-                query_offset=run_date.toordinal(),
+                query_offset=run_date.toordinal() + slot,
             )
         except Exception:
             logger.exception("daily Pexels refresh failed; continuing with cached footage")
@@ -167,8 +172,10 @@ def create_daily_short(
                 visual=Path(str(visual_asset["local_file"])),
                 audio=audio.path,
                 label=str(visual_asset["search_query"]),
-                visual_start_sec=(run_date.toordinal() * (index + 3) * 1.7) % (visual_room + 0.001),
-                audio_start_sec=(run_date.toordinal() * (index + 1) * 0.7) % (audio_room + 0.001),
+                visual_start_sec=((run_date.toordinal() + slot * 11) * (index + 3) * 1.7)
+                % (visual_room + 0.001),
+                audio_start_sec=((run_date.toordinal() + slot * 7) * (index + 1) * 0.7)
+                % (audio_room + 0.001),
             )
         )
 
@@ -182,7 +189,7 @@ def create_daily_short(
             "tags": ["Shorts", "BGM", "AIMusic"],
         },
     )
-    output = paths.data_root / "shorts" / run_date.isoformat() / f"{theme}.mp4"
+    output = paths.data_root / "shorts" / run_date.isoformat() / f"{slot:02d}-{theme}.mp4"
     probe = render_short(
         paths,
         scenes,

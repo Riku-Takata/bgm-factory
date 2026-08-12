@@ -18,17 +18,24 @@ logger = logging.getLogger(__name__)
 
 def enqueue_daily_generation(
     paths: ServerPaths, config: AppConfig, repository: Repository
-) -> str | None:
+) -> list[str]:
     now = datetime.now(config.timezone)
     themes = list(load_yaml(paths, "themes.yaml"))
-    theme = themes[now.date().toordinal() % len(themes)] if themes else config.generation.default_theme
-    prompt, _ = build_prompt(theme, paths, now.date().toordinal())
-    job_id = repository.enqueue_scheduled_job(
-        now.date(), theme, prompt, config.generation.candidates_per_theme
-    )
-    if job_id:
-        logger.info("scheduled generation job=%s theme=%s", job_id, theme)
-    return job_id
+    themes = themes or [config.generation.default_theme]
+    job_ids: list[str] = []
+    for index, theme in enumerate(themes):
+        prompt, _ = build_prompt(theme, paths, now.date().toordinal() + index)
+        job_id = repository.enqueue_scheduled_job(
+            now.date(),
+            theme,
+            prompt,
+            config.generation.candidates_per_theme,
+            schedule_name=f"daily_generation_{theme}",
+        )
+        if job_id:
+            logger.info("scheduled generation job=%s theme=%s", job_id, theme)
+            job_ids.append(job_id)
+    return job_ids
 
 
 def cleanup_runtime(paths: ServerPaths, config: AppConfig) -> int:
@@ -84,7 +91,7 @@ def upload_next_job(paths: ServerPaths, config: AppConfig, repository: Repositor
 
 
 def create_daily_short_job(
-    paths: ServerPaths, config: AppConfig, repository: Repository
+    paths: ServerPaths, config: AppConfig, repository: Repository, slot: int
 ) -> None:
     try:
         result = create_daily_short(
@@ -92,6 +99,7 @@ def create_daily_short_job(
             config,
             repository,
             run_date=datetime.now(config.timezone).date(),
+            slot=slot,
         )
         logger.info("daily Short created result=%s", result)
     except Exception:
@@ -112,16 +120,17 @@ def create_scheduler(
         coalesce=True,
         max_instances=1,
     )
-    scheduler.add_job(
-        create_daily_short_job,
-        "cron",
-        hour=config.schedule.production_hour,
-        minute=config.schedule.production_minute,
-        args=(paths, config, repository),
-        id="daily_short_production",
-        coalesce=True,
-        max_instances=1,
-    )
+    for slot, (hour, minute) in enumerate(config.schedule.parsed_production_times()):
+        scheduler.add_job(
+            create_daily_short_job,
+            "cron",
+            hour=hour,
+            minute=minute,
+            args=(paths, config, repository, slot),
+            id=f"daily_short_production_{slot:02d}",
+            coalesce=True,
+            max_instances=1,
+        )
     scheduler.add_job(
         cleanup_runtime,
         "cron",

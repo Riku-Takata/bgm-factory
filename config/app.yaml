@@ -7,8 +7,8 @@ generation:
   enabled: true
   engine: ace_step
   duration_sec: 16
-  candidates_per_theme: 5
-  batch_size: 5
+  candidates_per_theme: 3
+  batch_size: 3
   default_theme: summer_drive
   inference_steps: 8
   poll_interval_sec: 2
@@ -63,6 +63,7 @@ schedule:
   generation_minute: 15
   production_hour: 6
   production_minute: 0
+  production_times: ["06:00", "13:00", "20:00"]
   cleanup_hour: 4
   cleanup_minute: 0
 

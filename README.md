@@ -87,8 +87,9 @@ download URL, dimensions, duration, and SHA-256 are also recorded in SQLite.
 
 Production runs without paid generation APIs: ACE-Step creates music locally,
 Pexels supplies cached portrait footage, and FFmpeg renders the 9:16 video. The
-default server schedule enqueues five music candidates at 03:15, renders one
-40-second Short at 06:00, and uploads pending videos every 15 minutes. Production
+default server schedule enqueues three candidates for each theme at 03:15, renders
+three 40-second Shorts at 06:00, 13:00, and 20:00, and uploads pending videos every
+15 minutes. Production
 uploads use the privacy setting in `youtube.upload_privacy`; the server runtime is
 configured for `public`. Existing QA uploads are not modified.
 

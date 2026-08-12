@@ -77,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     produce.add_argument("--date", type=date.fromisoformat, default=None)
     produce.add_argument("--theme", default=None)
+    produce.add_argument("--slot", type=int, default=0)
     commands.add_parser("youtube-collect", help="collect YouTube statistics and Analytics")
     return parser
 
@@ -261,6 +262,7 @@ def main() -> None:
             repository,
             run_date=args.date or date.today(),  # noqa: DTZ011 - CLI date uses server local date.
             theme=args.theme,
+            slot=args.slot,
         )
         print(
             json.dumps(
