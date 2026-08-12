@@ -16,6 +16,7 @@ class ShortScene:
     visual: Path
     audio: Path
     label: str
+    track_title: str | None = None
     visual_start_sec: float = 0.0
     audio_start_sec: float = 0.0
 
@@ -95,7 +96,7 @@ def _segment_filter(
     marker_x, marker_y, marker_size = round(width * 0.07), round(height * 0.057), round(width * 0.026)
     progress_x, progress_y = round(width * 0.12), round(height * 0.88)
     progress_width, progress_height = round(width * 0.759), max(4, round(height * 0.006))
-    title = _drawtext(title_text.upper())
+    title = _drawtext((scene.track_title or title_text).upper())
     label = _drawtext(f"{index:02d} / {scene_count:02d}  {scene.label.upper()}")
     marker_filter = ""
     if marker_text:
@@ -209,6 +210,8 @@ def render_short(
                     *visual_input,
                     "-i",
                     str(scene.visual.resolve()),
+                    "-stream_loop",
+                    "-1",
                     "-ss",
                     f"{scene.audio_start_sec:.3f}",
                     "-i",

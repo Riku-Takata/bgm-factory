@@ -12,6 +12,16 @@ def slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
 
 
+def proposed_name(theme: str, seed: int, paths: ServerPaths) -> tuple[str, str]:
+    """Return the stable first title candidate for generated audio metadata."""
+    dictionaries = load_yaml(paths, "naming_words.yaml")
+    family = "night" if any(word in theme for word in ("night", "sleep", "rain")) else "summer"
+    words = dictionaries.get(family) or next(iter(dictionaries.values()))
+    generator = random.Random(seed)
+    name = f"{generator.choice(words['prefix'])} {generator.choice(words['suffix'])}"
+    return name, slugify(name)
+
+
 def generate_name(
     theme: str, seed: int, repository: Repository, paths: ServerPaths
 ) -> tuple[str, str]:

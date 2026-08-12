@@ -20,7 +20,12 @@ def test_short_requires_five_scenes(tmp_path: Path) -> None:
 
 
 def test_production_filter_has_dynamic_title_and_no_private_marker(tmp_path: Path) -> None:
-    scene = ShortScene(tmp_path / "clip.mp4", tmp_path / "audio.wav", "ocean road")
+    scene = ShortScene(
+        tmp_path / "clip.mp4",
+        tmp_path / "audio.wav",
+        "ocean road",
+        track_title="Golden Horizon",
+    )
 
     rendered = _segment_filter(
         scene,
@@ -35,5 +40,6 @@ def test_production_filter_has_dynamic_title_and_no_private_marker(tmp_path: Pat
         marker_text=None,
     )
 
-    assert "SUMMER DRIVE" in rendered
+    assert "GOLDEN HORIZON" in rendered
+    assert "SUMMER DRIVE" not in rendered
     assert "PRIVATE" not in rendered

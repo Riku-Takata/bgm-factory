@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import AppConfig, load_yaml
 from .db import Repository
+from .naming import proposed_name, slugify
 from .paths import ServerPaths
 from .pexels import (
     cached_theme_scenes,
@@ -25,6 +26,8 @@ class AudioSource:
     path: Path
     duration_sec: float
     score: float
+    name: str
+    slug: str
 
 
 @dataclass(frozen=True)
@@ -39,44 +42,44 @@ class DailyShortResult:
 
 THEME_COPY = {
     "summer_drive": {
-        "title": "Summer Drive BGM 🌊 Coastal Roads & Sunset | #Shorts",
-        "description": "AI-generated instrumental BGM for a bright summer drive.",
-        "tags": ["Shorts", "BGM", "SummerDrive", "DrivingMusic", "AIMusic"],
+        "title_suffix": "Summer Drive BGM 🌊",
+        "description": "Instrumental BGM for a bright summer drive.",
+        "tags": ["Shorts", "BGM", "SummerDrive", "DrivingMusic"],
     },
     "night_drive": {
-        "title": "Night Drive BGM 🌃 Neon Streets & Rain | #Shorts",
-        "description": "AI-generated instrumental BGM for a neon night drive.",
-        "tags": ["Shorts", "BGM", "NightDrive", "DrivingMusic", "AIMusic"],
+        "title_suffix": "Night Drive BGM 🌃",
+        "description": "Instrumental BGM for a neon night drive.",
+        "tags": ["Shorts", "BGM", "NightDrive", "DrivingMusic"],
     },
     "chill": {
-        "title": "Chill BGM 🌿 Ocean, Forest & Clouds | #Shorts",
-        "description": "AI-generated instrumental BGM for a calm break.",
-        "tags": ["Shorts", "BGM", "ChillMusic", "RelaxingMusic", "AIMusic"],
+        "title_suffix": "Chill BGM 🌿",
+        "description": "Instrumental BGM for a calm break.",
+        "tags": ["Shorts", "BGM", "ChillMusic", "RelaxingMusic"],
     },
     "focus_study": {
-        "title": "Focus & Study BGM | Deep Concentration #Shorts",
-        "description": "AI-generated instrumental BGM for focus and study.",
-        "tags": ["Shorts", "BGM", "FocusMusic", "StudyMusic", "AIMusic"],
+        "title_suffix": "Focus & Study BGM",
+        "description": "Instrumental BGM for focus and study.",
+        "tags": ["Shorts", "BGM", "FocusMusic", "StudyMusic"],
     },
     "morning_fresh": {
-        "title": "Fresh Morning BGM | Start Your Day #Shorts",
-        "description": "AI-generated instrumental BGM for a fresh morning.",
-        "tags": ["Shorts", "BGM", "MorningMusic", "FreshStart", "AIMusic"],
+        "title_suffix": "Fresh Morning BGM",
+        "description": "Instrumental BGM for a fresh morning.",
+        "tags": ["Shorts", "BGM", "MorningMusic", "FreshStart"],
     },
     "rain_cafe": {
-        "title": "Rainy Café BGM | Cozy Coffee Time #Shorts",
-        "description": "AI-generated instrumental BGM for a rainy café mood.",
-        "tags": ["Shorts", "BGM", "CafeMusic", "RainyDay", "AIMusic"],
+        "title_suffix": "Rainy Café BGM",
+        "description": "Instrumental BGM for a rainy café mood.",
+        "tags": ["Shorts", "BGM", "CafeMusic", "RainyDay"],
     },
     "ambient_sleep": {
-        "title": "Ambient Sleep BGM | Calm Night #Shorts",
-        "description": "AI-generated ambient BGM for winding down at night.",
-        "tags": ["Shorts", "BGM", "AmbientMusic", "SleepMusic", "AIMusic"],
+        "title_suffix": "Ambient Sleep BGM",
+        "description": "Ambient BGM for winding down at night.",
+        "tags": ["Shorts", "BGM", "AmbientMusic", "SleepMusic"],
     },
     "workout_upbeat": {
-        "title": "Upbeat Workout BGM | Energy Boost #Shorts",
-        "description": "AI-generated instrumental BGM for an energetic workout.",
-        "tags": ["Shorts", "BGM", "WorkoutMusic", "EnergyBoost", "AIMusic"],
+        "title_suffix": "Upbeat Workout BGM",
+        "description": "Instrumental BGM for an energetic workout.",
+        "tags": ["Shorts", "BGM", "WorkoutMusic", "EnergyBoost"],
     },
 }
 
@@ -98,6 +101,7 @@ def production_audio_sources(
 ) -> list[AudioSource]:
     sources: list[AudioSource] = []
     seen: set[Path] = set()
+    used_names: set[str] = set()
     for assets in (repository.bgm_assets(theme), repository.bgm_assets()):
         for asset in assets:
             path = Path(str(asset["master_file"]))
@@ -107,9 +111,12 @@ def production_audio_sources(
                         path,
                         float(asset["duration_sec"]),
                         float(asset["final_score"] or 0),
+                        str(asset["name"]),
+                        str(asset["slug"]),
                     )
                 )
                 seen.add(path)
+                used_names.add(str(asset["name"]))
 
     rejected_root = paths.data_root / "generated" / "rejected"
     metadata_files = sorted(
@@ -134,14 +141,22 @@ def production_audio_sources(
             logger.warning("ignored invalid rejected-candidate metadata file=%s", metadata_file)
             continue
         if eligible and audio_file not in seen:
+            seed = int(metadata.get("generation", {}).get("seed") or 0)
+            name, slug = proposed_name(str(metadata.get("theme") or theme), seed, paths)
+            if name in used_names:
+                name = f"{name} Signal {seed % 100000:05d}"
+                slug = slugify(name)
             sources.append(
                 AudioSource(
                     audio_file,
                     float(analysis["duration_sec"]),
                     float(analysis["final_score"]),
+                    name,
+                    slug,
                 )
             )
             seen.add(audio_file)
+            used_names.add(name)
     return sorted(sources, key=lambda source: source.score, reverse=True)
 
 
@@ -194,18 +209,21 @@ def create_daily_short(
     audio_sources = production_audio_sources(paths, config, repository, theme)
     if not audio_sources:
         raise RuntimeError(f"Theme {theme} has no production-eligible audio")
-
     scene_duration = float(config.shorts.get("target_duration_sec", 40)) / 5
     scenes: list[ShortScene] = []
+    selected_tracks: list[AudioSource] = []
+    track_offset = (run_date.toordinal() + slot) % len(audio_sources)
     for index, visual_asset in enumerate(visual_assets):
-        audio = audio_sources[index % len(audio_sources)]
+        track = audio_sources[(track_offset + index) % len(audio_sources)]
+        selected_tracks.append(track)
         visual_room = max(0.0, float(visual_asset["duration_sec"]) - scene_duration)
-        audio_room = max(0.0, audio.duration_sec - scene_duration)
+        audio_room = max(0.0, track.duration_sec - scene_duration)
         scenes.append(
             ShortScene(
                 visual=Path(str(visual_asset["local_file"])),
-                audio=audio.path,
+                audio=track.path,
                 label=str(visual_asset["search_query"]),
+                track_title=track.name,
                 visual_start_sec=((run_date.toordinal() + slot * 11) * (index + 3) * 1.7)
                 % (visual_room + 0.001),
                 audio_start_sec=((run_date.toordinal() + slot * 7) * (index + 1) * 0.7)
@@ -218,12 +236,21 @@ def create_daily_short(
     copy = THEME_COPY.get(
         theme,
         {
-            "title": f"{display_name} BGM | #Shorts",
-            "description": f"AI-generated instrumental BGM: {display_name}.",
-            "tags": ["Shorts", "BGM", "AIMusic"],
+            "title_suffix": f"{display_name} BGM",
+            "description": f"Instrumental BGM for {display_name}.",
+            "tags": ["Shorts", "BGM"],
         },
     )
-    output = paths.data_root / "shorts" / run_date.isoformat() / f"{slot:02d}-{theme}.mp4"
+    track_names = list(dict.fromkeys(track.name for track in selected_tracks))
+    lead_track = track_names[0]
+    collection_label = (
+        f"{lead_track} + {len(track_names) - 1} Tracks"
+        if len(track_names) > 1
+        else lead_track
+    )
+    video_title = f"{collection_label} | {copy['title_suffix']} #Shorts"
+    output_slug = selected_tracks[0].slug or slugify(lead_track) or theme
+    output = paths.data_root / "shorts" / run_date.isoformat() / f"{slot:02d}-{output_slug}.mp4"
     probe = render_short(
         paths,
         scenes,
@@ -237,15 +264,16 @@ def create_daily_short(
     )
     description = (
         f"{copy['description']}\n"
-        "Music generated locally with ACE-Step; visuals supplied by Pexels.\n\n"
+        f"Tracks: {', '.join(track_names)}\n"
+        "Visuals supplied by Pexels.\n\n"
         f"{pexels_attribution_block(visual_assets)}\n\n"
-        "#Shorts #BGM #AIMusic"
+        "#Shorts #BGM"
     )
     video_id = register_video(
         repository,
         output,
         kind="short",
-        title=str(copy["title"]),
+        title=video_title,
         description=description,
         tags=list(copy["tags"]),
         theme=theme,
@@ -257,7 +285,7 @@ def create_daily_short(
     return DailyShortResult(
         video_id=video_id,
         output_file=output,
-        title=str(copy["title"]),
+        title=video_title,
         privacy_status=config.youtube.upload_privacy,
         pexels_asset_ids=tuple(str(asset["id"]) for asset in visual_assets),
         probe=probe,

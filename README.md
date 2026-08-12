@@ -99,6 +99,12 @@ rotation when trend collection fails), favors the least-used Pexels clips, adds
 complete Pexels credits to the description, and skips publishing when no audio
 candidate passes the configured technical thresholds. Run it manually with:
 
+Each Short keeps the multi-track format. Every scene carries its selected
+track's unique catalog name, so the on-screen song title changes at the same
+cut where the audio changes. Upload titles and descriptions also use those
+catalog names; promotional AI wording is omitted while YouTube's required
+synthetic-content disclosure remains enabled.
+
 ```powershell
 D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe produce-daily-short `
   --date 2026-08-12 --theme summer_drive

@@ -19,6 +19,11 @@ def test_production_audio_uses_only_eligible_candidates(tmp_path: Path) -> None:
     )
     repository = Repository(paths.data_root / "db" / "factory.sqlite")
     repository.migrate()
+    paths.config_root.mkdir(parents=True)
+    (paths.config_root / "naming_words.yaml").write_text(
+        "summer:\n  prefix: [Golden]\n  suffix: [Horizon]\n",
+        encoding="utf-8",
+    )
     rejected = paths.data_root / "generated" / "rejected" / "2026-08-12"
     rejected.mkdir(parents=True)
     audio = rejected / "candidate.wav"
@@ -43,6 +48,8 @@ def test_production_audio_uses_only_eligible_candidates(tmp_path: Path) -> None:
     sources = production_audio_sources(paths, AppConfig(), repository, "summer_drive")
 
     assert [source.path for source in sources] == [audio]
+    assert sources[0].name
+    assert sources[0].slug
 
 
 def test_theme_rotation_changes_by_slot(tmp_path: Path) -> None:
