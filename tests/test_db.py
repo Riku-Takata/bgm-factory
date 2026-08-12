@@ -1,4 +1,5 @@
 import hashlib
+from datetime import date
 from pathlib import Path
 
 from bgm_factory.db import Repository
@@ -101,3 +102,59 @@ def test_pexels_asset_metadata_is_idempotent(tmp_path: Path) -> None:
     assert len(repository.pexels_assets("summer_drive")) == 1
     repository.mark_pexels_assets_used(["pexels_123"])
     assert repository.pexels_assets("summer_drive")[0]["use_count"] == 1
+
+
+def test_trend_snapshots_and_decisions_are_replaceable(tmp_path: Path) -> None:
+    repository = Repository(tmp_path / "factory.sqlite")
+    repository.migrate()
+    run_date = date(2026, 8, 12)
+    snapshot = {
+        "source": "search",
+        "query": "chill bgm",
+        "hinted_theme": "chill",
+        "youtube_video_id": "video1",
+        "title": "Chill BGM",
+        "channel_title": "Creator",
+        "published_at": "2026-08-12T00:00:00+00:00",
+        "view_count": 100,
+        "safe": True,
+    }
+
+    repository.replace_trend_snapshots(run_date, [snapshot])
+    repository.replace_trend_snapshots(run_date, [snapshot])
+    repository.replace_daily_theme_decisions(
+        run_date,
+        [
+            {
+                "slot": 0,
+                "theme": "chill",
+                "total_score": 0.8,
+                "source": "youtube_trends",
+                "reason_json": "{}",
+            }
+        ],
+    )
+
+    assert len(repository.trend_snapshots(run_date, safe_only=True)) == 1
+    assert repository.daily_theme_decisions(run_date)[0]["theme"] == "chill"
+
+
+def test_uploaded_video_channel_is_recorded(tmp_path: Path) -> None:
+    repository = Repository(tmp_path / "factory.sqlite")
+    repository.migrate()
+    video_id = repository.register_video(
+        {
+            "kind": "short",
+            "title": "Channel test",
+            "output_file": str(tmp_path / "video.mp4"),
+            "content_hash": hashlib.sha256(b"channel-video").hexdigest(),
+        }
+    )
+
+    repository.set_video_channel(video_id, "channel123")
+
+    with repository.connect() as connection:
+        channel_id = connection.execute(
+            "SELECT channel_id FROM youtube_videos WHERE id = ?", (video_id,)
+        ).fetchone()["channel_id"]
+    assert channel_id == "channel123"

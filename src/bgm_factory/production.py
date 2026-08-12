@@ -53,6 +53,31 @@ THEME_COPY = {
         "description": "AI-generated instrumental BGM for a calm break.",
         "tags": ["Shorts", "BGM", "ChillMusic", "RelaxingMusic", "AIMusic"],
     },
+    "focus_study": {
+        "title": "Focus & Study BGM | Deep Concentration #Shorts",
+        "description": "AI-generated instrumental BGM for focus and study.",
+        "tags": ["Shorts", "BGM", "FocusMusic", "StudyMusic", "AIMusic"],
+    },
+    "morning_fresh": {
+        "title": "Fresh Morning BGM | Start Your Day #Shorts",
+        "description": "AI-generated instrumental BGM for a fresh morning.",
+        "tags": ["Shorts", "BGM", "MorningMusic", "FreshStart", "AIMusic"],
+    },
+    "rain_cafe": {
+        "title": "Rainy Café BGM | Cozy Coffee Time #Shorts",
+        "description": "AI-generated instrumental BGM for a rainy café mood.",
+        "tags": ["Shorts", "BGM", "CafeMusic", "RainyDay", "AIMusic"],
+    },
+    "ambient_sleep": {
+        "title": "Ambient Sleep BGM | Calm Night #Shorts",
+        "description": "AI-generated ambient BGM for winding down at night.",
+        "tags": ["Shorts", "BGM", "AmbientMusic", "SleepMusic", "AIMusic"],
+    },
+    "workout_upbeat": {
+        "title": "Upbeat Workout BGM | Energy Boost #Shorts",
+        "description": "AI-generated instrumental BGM for an energetic workout.",
+        "tags": ["Shorts", "BGM", "WorkoutMusic", "EnergyBoost", "AIMusic"],
+    },
 }
 
 
@@ -131,7 +156,16 @@ def create_daily_short(
 ) -> DailyShortResult:
     if slot < 0:
         raise ValueError("slot cannot be negative")
-    theme = theme or theme_for_date(paths, config, run_date, slot)
+    if theme is None:
+        # Persisted decisions make generation auditable and stable even if
+        # external trend results change later in the day.
+        decisions = repository.daily_theme_decisions(run_date)
+        selected = next((item for item in decisions if int(item["slot"]) == slot), None)
+        theme = (
+            str(selected["theme"])
+            if selected
+            else theme_for_date(paths, config, run_date, slot)
+        )
     schedule_name = f"daily_public_short_{slot:02d}"
     if repository.schedule_run_exists(schedule_name, run_date):
         raise RuntimeError(f"Daily Short already created for {run_date.isoformat()}")

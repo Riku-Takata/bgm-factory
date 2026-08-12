@@ -87,19 +87,39 @@ download URL, dimensions, duration, and SHA-256 are also recorded in SQLite.
 
 Production runs without paid generation APIs: ACE-Step creates music locally,
 Pexels supplies cached portrait footage, and FFmpeg renders the 9:16 video. The
-default server schedule enqueues three candidates for each theme at 03:15, renders
-three 40-second Shorts at 06:00, 13:00, and 20:00, and uploads pending videos every
+default server schedule selects three themes from the daily trend decision,
+enqueues three candidates for each selected theme at 03:15, renders three
+40-second Shorts at 06:00, 13:00, and 20:00, and uploads pending videos every
 15 minutes. Production
 uploads use the privacy setting in `youtube.upload_privacy`; the server runtime is
 configured for `public`. Existing QA uploads are not modified.
 
-The daily job is idempotent, rotates themes, favors the least-used Pexels clips,
-adds complete Pexels credits to the description, and skips publishing when no
-audio candidate passes the configured technical thresholds. Run it manually with:
+The daily job is idempotent, uses persisted trend decisions (or deterministic
+rotation when trend collection fails), favors the least-used Pexels clips, adds
+complete Pexels credits to the description, and skips publishing when no audio
+candidate passes the configured technical thresholds. Run it manually with:
 
 ```powershell
 D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe produce-daily-short `
   --date 2026-08-12 --theme summer_drive
+```
+
+### YouTube trend-based theme selection
+
+At 02:30 the worker reads Japan's YouTube music `mostPopular` chart and performs
+eight bounded searches for the configured safe BGM theme packs. It rejects titles that
+contain blocked entertainment, lyrics, political, incident, or disaster terms;
+external titles are used only as ranking evidence and never copied into prompts.
+The selector combines views per hour, evidence freshness, this channel's 30-day
+retention/engagement performance, and the scheduled posting time. It persists raw
+snapshots, candidate scores, selected slots, sources, and reasons in SQLite. If
+the API is unavailable, it records and uses the deterministic theme rotation.
+
+Inspect or refresh a day's decision manually:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-trends `
+  --date 2026-08-12
 ```
 
 動画はSHA-256で重複判定します。アップロード結果が不明な場合は `uncertain` で停止し、自動再投稿しません。`auto_upload: true` にすると15分ごとに登録済み動画を1本ずつPrivate投稿します。`auto_publish` は初期状態では無効です。

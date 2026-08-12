@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS youtube_videos (
     uploaded_at TEXT,
     published_at TEXT,
     error_message TEXT,
+    channel_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -172,6 +173,55 @@ CREATE TABLE IF NOT EXISTS pexels_assets (
 
 CREATE INDEX IF NOT EXISTS idx_pexels_assets_theme
 ON pexels_assets(theme, use_count, created_at);
+
+CREATE TABLE IF NOT EXISTS trend_snapshots (
+    id TEXT PRIMARY KEY,
+    snapshot_date TEXT NOT NULL,
+    source TEXT NOT NULL,
+    query TEXT,
+    hinted_theme TEXT,
+    youtube_video_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    channel_title TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    like_count INTEGER NOT NULL DEFAULT 0,
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    duration_iso TEXT,
+    safe INTEGER NOT NULL,
+    blocked_reason TEXT,
+    collected_at TEXT NOT NULL,
+    UNIQUE(snapshot_date, source, query, youtube_video_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_trend_snapshots_date
+ON trend_snapshots(snapshot_date, safe);
+
+CREATE TABLE IF NOT EXISTS trend_candidates (
+    run_date TEXT NOT NULL,
+    theme TEXT NOT NULL,
+    external_score REAL NOT NULL,
+    channel_score REAL NOT NULL,
+    freshness_score REAL NOT NULL,
+    total_score REAL NOT NULL,
+    evidence_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(run_date, theme)
+);
+
+CREATE TABLE IF NOT EXISTS daily_theme_decisions (
+    run_date TEXT NOT NULL,
+    slot INTEGER NOT NULL,
+    theme TEXT NOT NULL,
+    total_score REAL NOT NULL,
+    source TEXT NOT NULL,
+    reason_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(run_date, slot)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_theme_decisions_theme
+ON daily_theme_decisions(theme, run_date);
 """
 
 
@@ -191,6 +241,12 @@ class Repository:
     def migrate(self) -> None:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(youtube_videos)").fetchall()
+            }
+            if "channel_id" not in columns:
+                connection.execute("ALTER TABLE youtube_videos ADD COLUMN channel_id TEXT")
 
     def recover_interrupted_jobs(self) -> int:
         now = utc_now()
@@ -490,6 +546,157 @@ class Repository:
                 (utc_now(), *asset_ids),
             )
 
+    def replace_trend_snapshots(
+        self, snapshot_date: date, snapshots: list[dict[str, Any]]
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM trend_snapshots WHERE snapshot_date = ?",
+                (snapshot_date.isoformat(),),
+            )
+            for values in snapshots:
+                connection.execute(
+                    """
+                    INSERT INTO trend_snapshots (
+                        id, snapshot_date, source, query, hinted_theme,
+                        youtube_video_id, title, channel_title, published_at,
+                        view_count, like_count, comment_count, duration_iso,
+                        safe, blocked_reason, collected_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        values.get("id") or f"trend_{uuid.uuid4().hex}",
+                        snapshot_date.isoformat(),
+                        values["source"],
+                        values.get("query"),
+                        values.get("hinted_theme"),
+                        values["youtube_video_id"],
+                        values["title"],
+                        values.get("channel_title", ""),
+                        values["published_at"],
+                        values.get("view_count", 0),
+                        values.get("like_count", 0),
+                        values.get("comment_count", 0),
+                        values.get("duration_iso"),
+                        1 if values.get("safe", False) else 0,
+                        values.get("blocked_reason"),
+                        utc_now(),
+                    ),
+                )
+
+    def trend_snapshots(self, snapshot_date: date, *, safe_only: bool = False) -> list[dict]:
+        query = "SELECT * FROM trend_snapshots WHERE snapshot_date = ?"
+        values: tuple[Any, ...] = (snapshot_date.isoformat(),)
+        if safe_only:
+            query += " AND safe = 1"
+        query += " ORDER BY view_count DESC"
+        with self.connect() as connection:
+            return [dict(row) for row in connection.execute(query, values).fetchall()]
+
+    def replace_trend_candidates(
+        self, run_date: date, candidates: list[dict[str, Any]]
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM trend_candidates WHERE run_date = ?", (run_date.isoformat(),)
+            )
+            for candidate in candidates:
+                connection.execute(
+                    """
+                    INSERT INTO trend_candidates (
+                        run_date, theme, external_score, channel_score,
+                        freshness_score, total_score, evidence_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_date.isoformat(),
+                        candidate["theme"],
+                        candidate["external_score"],
+                        candidate["channel_score"],
+                        candidate["freshness_score"],
+                        candidate["total_score"],
+                        candidate.get("evidence_json", "{}"),
+                        utc_now(),
+                    ),
+                )
+
+    def trend_candidates(self, run_date: date) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM trend_candidates WHERE run_date = ?
+                ORDER BY total_score DESC, theme
+                """,
+                (run_date.isoformat(),),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def replace_daily_theme_decisions(
+        self, run_date: date, decisions: list[dict[str, Any]]
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM daily_theme_decisions WHERE run_date = ?",
+                (run_date.isoformat(),),
+            )
+            for decision in decisions:
+                connection.execute(
+                    """
+                    INSERT INTO daily_theme_decisions (
+                        run_date, slot, theme, total_score, source, reason_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_date.isoformat(),
+                        decision["slot"],
+                        decision["theme"],
+                        decision["total_score"],
+                        decision["source"],
+                        decision.get("reason_json", "{}"),
+                        utc_now(),
+                    ),
+                )
+
+    def daily_theme_decisions(self, run_date: date) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM daily_theme_decisions WHERE run_date = ? ORDER BY slot
+                """,
+                (run_date.isoformat(),),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def theme_performance(
+        self, since_date: date, channel_id: str | None = None
+    ) -> dict[str, dict[str, float]]:
+        channel_clause = " AND v.channel_id = ?" if channel_id else ""
+        parameters: tuple[Any, ...] = (
+            (since_date.isoformat(), channel_id)
+            if channel_id
+            else (since_date.isoformat(),)
+        )
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT v.theme,
+                       COALESCE(SUM(m.views), 0) AS views,
+                       COALESCE(SUM(m.engaged_views), 0) AS engaged_views,
+                       COALESCE(AVG(m.average_view_percentage), 0) AS average_view_percentage,
+                       COALESCE(SUM(m.likes), 0) AS likes,
+                       COALESCE(SUM(m.subscribers_gained), 0) AS subscribers_gained
+                FROM youtube_metrics_daily AS m
+                JOIN youtube_videos AS v ON v.youtube_video_id = m.youtube_video_id
+                WHERE m.metric_date >= ? AND v.theme IS NOT NULL{channel_clause}
+                GROUP BY v.theme
+                """,
+                parameters,
+            ).fetchall()
+        return {str(row["theme"]): dict(row) for row in rows}
+
     def register_video(self, values: dict[str, Any]) -> str:
         now = utc_now()
         video_id = values.get("id") or f"video_{uuid.uuid4().hex}"
@@ -566,6 +773,13 @@ class Repository:
                 WHERE id = ?
                 """,
                 (youtube_video_id, now, now, video_id),
+            )
+
+    def set_video_channel(self, video_id: str, channel_id: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE youtube_videos SET channel_id = ?, updated_at = ? WHERE id = ?",
+                (channel_id, utc_now(), video_id),
             )
 
     def mark_video_upload_uncertain(self, video_id: str, error: str) -> None:

@@ -13,6 +13,7 @@ from .service import process_next_job
 from .short_renderer import ShortScene, render_short
 from .youtube_analytics import collect_youtube_analytics
 from .youtube_auth import authorization_summary, authorize, connection_status
+from .youtube_trends import collect_and_decide_daily_themes, decision_payload
 from .youtube_uploader import register_video, upload_next
 
 
@@ -79,6 +80,8 @@ def build_parser() -> argparse.ArgumentParser:
     produce.add_argument("--theme", default=None)
     produce.add_argument("--slot", type=int, default=0)
     commands.add_parser("youtube-collect", help="collect YouTube statistics and Analytics")
+    trends = commands.add_parser("youtube-trends", help="collect and rank daily themes")
+    trends.add_argument("--date", type=date.fromisoformat, default=None)
     return parser
 
 
@@ -282,6 +285,15 @@ def main() -> None:
     if args.command == "youtube-collect":
         result = collect_youtube_analytics(paths, config, repository)
         print(json.dumps(result, indent=2))
+        return
+    if args.command == "youtube-trends":
+        decisions = collect_and_decide_daily_themes(
+            paths,
+            config,
+            repository,
+            run_date=args.date,
+        )
+        print(json.dumps(decision_payload(decisions), ensure_ascii=False, indent=2))
         return
     print(
         json.dumps(

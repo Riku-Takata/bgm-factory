@@ -16,7 +16,7 @@ def generate_name(
     theme: str, seed: int, repository: Repository, paths: ServerPaths
 ) -> tuple[str, str]:
     dictionaries = load_yaml(paths, "naming_words.yaml")
-    family = "night" if "night" in theme else "summer"
+    family = "night" if any(word in theme for word in ("night", "sleep", "rain")) else "summer"
     words = dictionaries.get(family) or next(iter(dictionaries.values()))
     generator = random.Random(seed)
     for _ in range(100):

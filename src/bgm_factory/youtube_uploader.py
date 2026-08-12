@@ -120,6 +120,7 @@ def upload_video(
         if not youtube_video_id:
             raise RuntimeError("YouTube upload returned no video ID")
         repository.finish_video_upload(video.id, youtube_video_id)
+        repository.set_video_channel(video.id, str(status.channel_id))
         return str(youtube_video_id)
     except Exception as exc:
         repository.mark_video_upload_uncertain(video.id, str(exc))

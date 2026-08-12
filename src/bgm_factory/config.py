@@ -94,6 +94,50 @@ class AnalyticsSettings(BaseModel):
     lookback_days: int = Field(default=90, ge=1, le=365)
 
 
+class TrendSettings(BaseModel):
+    enabled: bool = True
+    collection_hour: int = Field(default=2, ge=0, le=23)
+    collection_minute: int = Field(default=30, ge=0, le=59)
+    lookback_days: int = Field(default=7, ge=1, le=30)
+    max_results_per_query: int = Field(default=12, ge=1, le=50)
+    popular_results: int = Field(default=50, ge=1, le=50)
+    external_weight: float = Field(default=0.40, ge=0, le=1)
+    channel_weight: float = Field(default=0.35, ge=0, le=1)
+    time_weight: float = Field(default=0.15, ge=0, le=1)
+    freshness_weight: float = Field(default=0.10, ge=0, le=1)
+    blocked_terms: list[str] = [
+        "official music video",
+        "lyrics",
+        "cover",
+        "remix",
+        "anime",
+        "game ost",
+        "歌詞",
+        "歌ってみた",
+        "アニメ",
+        "ゲーム",
+        "映画",
+        "ドラマ",
+        "政治",
+        "選挙",
+        "事件",
+        "事故",
+        "災害",
+    ]
+
+    def normalized_weights(self) -> tuple[float, float, float, float]:
+        values = (
+            self.external_weight,
+            self.channel_weight,
+            self.time_weight,
+            self.freshness_weight,
+        )
+        total = sum(values)
+        if total <= 0:
+            raise ValueError("At least one trend score weight must be positive")
+        return tuple(value / total for value in values)  # type: ignore[return-value]
+
+
 class DashboardSettings(BaseModel):
     enabled: bool = True
     host: str = "127.0.0.1"
@@ -134,6 +178,7 @@ class AppConfig(BaseModel):
     storage: StorageSettings = StorageSettings()
     schedule: ScheduleSettings = ScheduleSettings()
     analytics: AnalyticsSettings = AnalyticsSettings()
+    trends: TrendSettings = TrendSettings()
     dashboard: DashboardSettings = DashboardSettings()
     pexels: PexelsSettings = PexelsSettings()
     shorts: dict = {}

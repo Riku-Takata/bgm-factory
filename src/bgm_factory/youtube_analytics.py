@@ -37,13 +37,30 @@ def collect_youtube_analytics(
     youtube = build("youtube", "v3", credentials=credentials, cache_discovery=False)
     analytics = build("youtubeAnalytics", "v2", credentials=credentials, cache_discovery=False)
     video_ids = [str(video["youtube_video_id"]) for video in videos]
+    local_video_ids = {
+        str(video["youtube_video_id"]): str(video["id"])
+        for video in videos
+        if video.get("youtube_video_id")
+    }
 
     snapshots = 0
+    current_channel_video_ids: list[str] = []
     for offset in range(0, len(video_ids), 50):
         batch = video_ids[offset : offset + 50]
-        response = youtube.videos().list(part="statistics", id=",".join(batch)).execute()
+        response = (
+            youtube.videos()
+            .list(part="snippet,statistics", id=",".join(batch))
+            .execute()
+        )
         for item in response.get("items", []):
             statistics = item.get("statistics", {})
+            snippet = item.get("snippet", {})
+            local_video_id = local_video_ids.get(str(item["id"]))
+            channel_id = snippet.get("channelId")
+            if local_video_id and channel_id:
+                repository.set_video_channel(local_video_id, str(channel_id))
+            if channel_id == status.channel_id:
+                current_channel_video_ids.append(str(item["id"]))
             repository.record_video_snapshot(
                 item["id"],
                 _integer(statistics.get("viewCount")),
@@ -55,8 +72,8 @@ def collect_youtube_analytics(
     end_date = datetime.now(UTC).date()
     start_date = end_date - timedelta(days=config.analytics.lookback_days)
     daily_rows = 0
-    for offset in range(0, len(video_ids), 500):
-        batch = video_ids[offset : offset + 500]
+    for offset in range(0, len(current_channel_video_ids), 500):
+        batch = current_channel_video_ids[offset : offset + 500]
         response = (
             analytics.reports()
             .query(
@@ -93,4 +110,8 @@ def collect_youtube_analytics(
                 }
             )
             daily_rows += 1
-    return {"videos": len(video_ids), "snapshots": snapshots, "daily_rows": daily_rows}
+    return {
+        "videos": len(current_channel_video_ids),
+        "snapshots": snapshots,
+        "daily_rows": daily_rows,
+    }

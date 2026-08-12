@@ -5,12 +5,13 @@ from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from .config import AppConfig, load_yaml
+from .config import AppConfig
 from .db import Repository
 from .paths import ServerPaths
 from .production import create_daily_short
 from .prompt import build_prompt
 from .youtube_analytics import collect_youtube_analytics
+from .youtube_trends import collect_and_decide_daily_themes, decide_daily_themes
 from .youtube_uploader import upload_next
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,15 @@ def enqueue_daily_generation(
     paths: ServerPaths, config: AppConfig, repository: Repository
 ) -> list[str]:
     now = datetime.now(config.timezone)
-    themes = list(load_yaml(paths, "themes.yaml"))
-    themes = themes or [config.generation.default_theme]
+    decisions = repository.daily_theme_decisions(now.date())
+    if not decisions:
+        decisions = [
+            {
+                "theme": decision.theme,
+            }
+            for decision in decide_daily_themes(paths, config, repository, run_date=now.date())
+        ]
+    themes = list(dict.fromkeys(str(decision["theme"]) for decision in decisions))
     job_ids: list[str] = []
     for index, theme in enumerate(themes):
         prompt, _ = build_prompt(theme, paths, now.date().toordinal() + index)
@@ -36,6 +44,27 @@ def enqueue_daily_generation(
             logger.info("scheduled generation job=%s theme=%s", job_id, theme)
             job_ids.append(job_id)
     return job_ids
+
+
+def collect_trends_job(
+    paths: ServerPaths, config: AppConfig, repository: Repository
+) -> None:
+    try:
+        decisions = collect_and_decide_daily_themes(paths, config, repository)
+        logger.info("daily trend themes selected decisions=%s", decisions)
+    except Exception:
+        logger.exception("daily trend collection failed; applying fallback rotation")
+        try:
+            decisions = decide_daily_themes(
+                paths,
+                config,
+                repository,
+                run_date=datetime.now(config.timezone).date(),
+                force_fallback=True,
+            )
+            logger.info("fallback daily themes selected decisions=%s", decisions)
+        except Exception:
+            logger.exception("fallback daily theme selection failed")
 
 
 def cleanup_runtime(paths: ServerPaths, config: AppConfig) -> int:
@@ -110,6 +139,16 @@ def create_scheduler(
     paths: ServerPaths, config: AppConfig, repository: Repository
 ) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=config.timezone)
+    scheduler.add_job(
+        collect_trends_job,
+        "cron",
+        hour=config.trends.collection_hour,
+        minute=config.trends.collection_minute,
+        args=(paths, config, repository),
+        id="daily_youtube_trends",
+        coalesce=True,
+        max_instances=1,
+    )
     scheduler.add_job(
         enqueue_daily_generation,
         "cron",

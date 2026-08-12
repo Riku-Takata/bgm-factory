@@ -73,6 +73,18 @@ analytics:
   collection_minute: 0
   lookback_days: 90
 
+trends:
+  enabled: true
+  collection_hour: 2
+  collection_minute: 30
+  lookback_days: 7
+  max_results_per_query: 12
+  popular_results: 50
+  external_weight: 0.40
+  channel_weight: 0.35
+  time_weight: 0.15
+  freshness_weight: 0.10
+
 dashboard:
   enabled: true
   host: 127.0.0.1
