@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bgm-factory"
+version = "0.1.0"
+description = "Local-first YouTube BGM asset generation service"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "apscheduler>=3.11,<4",
+  "httpx>=0.28,<1",
+  "pydantic-settings>=2.10,<3",
+  "pyyaml>=6.0,<7",
+  "structlog>=25.4,<26",
+]
+
+[project.optional-dependencies]
+audio = [
+  "librosa>=0.11,<1",
+  "numpy>=2.2,<3",
+  "pyloudnorm>=0.1.1,<1",
+  "scipy>=1.15,<2",
+  "soundfile>=0.13,<1",
+]
+youtube = [
+  "google-api-python-client>=2.180,<3",
+  "google-auth-httplib2>=0.2,<1",
+  "google-auth-oauthlib>=1.2,<2",
+]
+dev = [
+  "pytest>=8.4,<9",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+bgm-factory-health = "bgm_factory.health:main"
+bgm-factory-worker = "bgm_factory.worker:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bgm_factory"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+

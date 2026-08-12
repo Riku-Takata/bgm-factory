@@ -1,0 +1,17 @@
+.venv/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Runtime state belongs under D:\HomeServer, not in the code repository.
+data/
+logs/
+*.pid
+client_secret.json
+token.json
+

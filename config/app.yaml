@@ -1,0 +1,56 @@
+app:
+  timezone: Asia/Tokyo
+  auto_upload: false
+  auto_publish: false
+
+generation:
+  engine: ace_step
+  duration_sec: 16
+  candidates_per_theme: 40
+  batch_size: 8
+
+resource_guard:
+  gpu_utilization_max: 35
+  min_free_vram_mb: 6000
+  gpu_temperature_max: 78
+  check_interval_sec: 60
+
+audio:
+  target_lufs: -14
+  true_peak_db: -1.5
+
+hook:
+  duration_sec: 7.5
+  min_score: 0.72
+
+loop:
+  crossfade_ms: 250
+  min_score: 0.70
+
+asset:
+  min_final_score: 0.75
+
+shorts:
+  asset_count: 5
+  width: 1080
+  height: 1920
+  fps: 30
+  target_duration_sec: 40
+
+long_mix:
+  width: 1920
+  height: 1080
+  fps: 30
+  track_crossfade_sec: 1.5
+  targets: [600, 1800, 3600]
+
+storage:
+  minimum_free_gb: 20
+  rejected_retention_days: 7
+  uploaded_video_retention_days: 30
+
+youtube:
+  region: JP
+  category_id: 10
+  upload_privacy: private
+

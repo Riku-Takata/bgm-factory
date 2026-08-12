@@ -1,0 +1,27 @@
+summer_drive:
+  display_name: Summer Drive
+  bpm: {min: 118, max: 132}
+  energy: {min: 0.70, max: 0.95}
+  keywords:
+    - bright electronic pop
+    - warm synth bass
+    - catchy pluck melody
+    - refreshing
+    - open-air feeling
+    - driving rhythm
+  avoid: [vocals, intro, outro, dramatic ending, long build up]
+
+night_drive:
+  display_name: Night Drive
+  bpm: {min: 105, max: 128}
+  energy: {min: 0.55, max: 0.85}
+  keywords: [night drive, neon atmosphere, steady rhythm, warm synth bass]
+  avoid: [vocals, intro, outro, dramatic ending]
+
+chill:
+  display_name: Chill
+  bpm: {min: 75, max: 105}
+  energy: {min: 0.30, max: 0.60}
+  keywords: [soft groove, warm texture, relaxed, seamless instrumental loop]
+  avoid: [vocals, aggressive drums, dramatic ending]
+
