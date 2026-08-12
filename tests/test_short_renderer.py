@@ -16,4 +16,4 @@ def test_short_requires_five_scenes(tmp_path: Path) -> None:
     audio.write_bytes(b"audio")
 
     with pytest.raises(ValueError, match="exactly five"):
-        _validate_scenes([ShortScene(image=image, audio=audio, label="one")])
+        _validate_scenes([ShortScene(visual=image, audio=audio, label="one")])

@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from bgm_factory.config import PexelsSettings
-from bgm_factory.pexels import PexelsClient, _allowed_media_url, _download
+from bgm_factory.pexels import PexelsClient, _allowed_media_url, _download, pexels_attribution_block
 
 
 def test_choose_file_prefers_portrait_near_1080p() -> None:
@@ -83,3 +83,12 @@ def test_download_hashes_and_cleans_partial_file(tmp_path: Path) -> None:
 def test_download_rejects_untrusted_host(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="unsupported"):
         _download(httpx.Client(), "https://example.com/video.mp4", tmp_path / "x.mp4", 1)
+
+
+def test_attribution_block_contains_source_and_license() -> None:
+    block = pexels_attribution_block(
+        [{"attribution_text": "Video by Creator on Pexels: https://pexels.example/video"}]
+    )
+
+    assert "Video by Creator" in block
+    assert "https://www.pexels.com/license/" in block

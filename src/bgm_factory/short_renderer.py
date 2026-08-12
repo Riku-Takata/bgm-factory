@@ -13,9 +13,10 @@ from .paths import ServerPaths
 
 @dataclass(frozen=True)
 class ShortScene:
-    image: Path
+    visual: Path
     audio: Path
     label: str
+    visual_start_sec: float = 0.0
     audio_start_sec: float = 0.0
 
 
@@ -57,14 +58,18 @@ def _validate_scenes(scenes: Sequence[ShortScene]) -> None:
     if len(scenes) != 5:
         raise ValueError("A Short must contain exactly five visual scenes")
     for scene in scenes:
-        if not scene.image.is_file():
-            raise FileNotFoundError(f"Scene image not found: {scene.image}")
+        if not scene.visual.is_file():
+            raise FileNotFoundError(f"Scene visual not found: {scene.visual}")
         if not scene.audio.is_file():
             raise FileNotFoundError(f"Scene audio not found: {scene.audio}")
         if not scene.label.strip():
             raise ValueError("Each scene must have a label")
-        if scene.audio_start_sec < 0:
-            raise ValueError("audio_start_sec cannot be negative")
+        if scene.audio_start_sec < 0 or scene.visual_start_sec < 0:
+            raise ValueError("Scene start times cannot be negative")
+
+
+def _is_still(path: Path) -> bool:
+    return path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def _segment_filter(
@@ -76,17 +81,27 @@ def _segment_filter(
     fps: int,
     width: int,
     height: int,
+    still: bool,
 ) -> str:
     frames = round(duration_sec * fps)
     fade_out = max(0.0, duration_sec - 0.15)
     title = _drawtext("SUMMER DRIVE")
     label = _drawtext(f"{index:02d} / {scene_count:02d}  {scene.label.upper()}")
-    marker = _drawtext("PRIVATE PIPELINE TEST")
-    return (
-        "[0:v]scale=1188:2112:force_original_aspect_ratio=increase,"
-        "crop=1188:2112,"
-        f"zoompan=z='min(zoom+0.00035,1.08)':x='iw/2-(iw/zoom/2)':"
-        f"y='ih/2-(ih/zoom/2)':d={frames}:s={width}x{height}:fps={fps},"
+    marker = _drawtext("PRIVATE VISUAL PIPELINE TEST")
+    if still:
+        visual = (
+            "[0:v]scale=1188:2112:force_original_aspect_ratio=increase,"
+            "crop=1188:2112,"
+            f"zoompan=z='min(zoom+0.00035,1.08)':x='iw/2-(iw/zoom/2)':"
+            f"y='ih/2-(ih/zoom/2)':d={frames}:s={width}x{height}:fps={fps},"
+        )
+    else:
+        visual = (
+            f"[0:v]trim=duration={duration_sec:.3f},setpts=PTS-STARTPTS,fps={fps},"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},setsar=1,"
+        )
+    return visual + (
         "eq=saturation=1.06:contrast=1.02,"
         f"fade=t=in:st=0:d=0.15,fade=t=out:st={fade_out:.2f}:d=0.15,"
         "drawbox=x=70:y=1450:w=940:h=340:color=black@0.38:t=fill,"
@@ -153,6 +168,11 @@ def render_short(
         segments: list[Path] = []
         for index, scene in enumerate(scenes, start=1):
             segment = temp_dir / f"segment-{index:02d}.mp4"
+            still = _is_still(scene.visual)
+            visual_input = ["-loop", "1", "-framerate", str(fps)] if still else [
+                "-ss",
+                f"{scene.visual_start_sec:.3f}",
+            ]
             runner(
                 [
                     ffmpeg,
@@ -160,12 +180,9 @@ def render_short(
                     "-loglevel",
                     "warning",
                     "-y",
-                    "-loop",
-                    "1",
-                    "-framerate",
-                    str(fps),
+                    *visual_input,
                     "-i",
-                    str(scene.image.resolve()),
+                    str(scene.visual.resolve()),
                     "-ss",
                     f"{scene.audio_start_sec:.3f}",
                     "-i",
@@ -179,6 +196,7 @@ def render_short(
                         fps=fps,
                         width=width,
                         height=height,
+                        still=still,
                     ),
                     "-map",
                     "[v]",

@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .pexels import fetch_theme_assets
+from .pexels import cached_theme_scenes, fetch_theme_assets, pexels_attribution_block
 from .prompt import build_prompt
 from .runtime import initialize_runtime
 from .service import process_next_job
@@ -39,9 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     upload = commands.add_parser("youtube-upload-next", help="upload one video as private")
     upload.add_argument("--confirm-private", action="store_true", required=True)
     render = commands.add_parser("short-render", help="render a five-scene vertical Short")
-    render.add_argument("--image", action="append", type=Path, required=True)
+    render.add_argument("--image", action="append", type=Path, default=[])
+    render.add_argument("--visual", action="append", type=Path, default=[])
     render.add_argument("--audio", action="append", type=Path, required=True)
     render.add_argument("--label", action="append", required=True)
+    render.add_argument("--visual-start", action="append", type=float, default=[])
     render.add_argument("--audio-start", action="append", type=float, default=[])
     render.add_argument("--output", type=Path, required=True)
     render.add_argument("--title", required=True)
@@ -49,6 +51,19 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--tag", action="append", default=[])
     render.add_argument("--theme", default=None)
     render.add_argument("--register", action="store_true")
+    pexels_render = commands.add_parser(
+        "pexels-short-render", help="render a Short from cached Pexels videos"
+    )
+    pexels_render.add_argument("--theme", default=None)
+    pexels_render.add_argument("--audio", action="append", type=Path, required=True)
+    pexels_render.add_argument("--label", action="append", required=True)
+    pexels_render.add_argument("--audio-start", action="append", type=float, default=[])
+    pexels_render.add_argument("--visual-start", action="append", type=float, default=[])
+    pexels_render.add_argument("--output", type=Path, required=True)
+    pexels_render.add_argument("--title", required=True)
+    pexels_render.add_argument("--description", default="")
+    pexels_render.add_argument("--tag", action="append", default=[])
+    pexels_render.add_argument("--register", action="store_true")
     pexels_fetch = commands.add_parser(
         "pexels-fetch", help="cache portrait stock videos and their attribution metadata"
     )
@@ -109,15 +124,25 @@ def main() -> None:
         print(json.dumps({"uploaded": result}, indent=2))
         return
     if args.command == "short-render":
-        if not (len(args.image) == len(args.audio) == len(args.label) == 5):
-            raise SystemExit("Exactly five --image, --audio, and --label arguments are required")
+        visuals = args.visual or args.image
+        if args.visual and args.image:
+            raise SystemExit("Use --visual or the legacy --image option, not both")
+        if not (len(visuals) == len(args.audio) == len(args.label) == 5):
+            raise SystemExit("Exactly five --visual, --audio, and --label arguments are required")
         starts = args.audio_start or [0.0] * 5
-        if len(starts) != 5:
-            raise SystemExit("Provide either zero or five --audio-start arguments")
+        visual_starts = args.visual_start or [0.0] * 5
+        if len(starts) != 5 or len(visual_starts) != 5:
+            raise SystemExit("Provide either zero or five scene start arguments")
         scenes = [
-            ShortScene(image=image, audio=audio, label=label, audio_start_sec=start)
-            for image, audio, label, start in zip(
-                args.image, args.audio, args.label, starts, strict=True
+            ShortScene(
+                visual=visual,
+                audio=audio,
+                label=label,
+                visual_start_sec=visual_start,
+                audio_start_sec=start,
+            )
+            for visual, audio, label, visual_start, start in zip(
+                visuals, args.audio, args.label, visual_starts, starts, strict=True
             )
         ]
         probe = render_short(paths, scenes, args.output)
@@ -136,6 +161,58 @@ def main() -> None:
         print(
             json.dumps(
                 {"output": str(args.output.resolve()), "probe": probe.__dict__, "video_id": video_id},
+                indent=2,
+            )
+        )
+        return
+    if args.command == "pexels-short-render":
+        theme = args.theme or config.generation.default_theme
+        assets = cached_theme_scenes(repository, theme)
+        if not (len(args.audio) == len(args.label) == 5):
+            raise SystemExit("Exactly five --audio and --label arguments are required")
+        starts = args.audio_start or [0.0] * 5
+        visual_starts = args.visual_start or [0.0] * 5
+        if len(starts) != 5 or len(visual_starts) != 5:
+            raise SystemExit("Provide either zero or five scene start arguments")
+        scenes = [
+            ShortScene(
+                visual=Path(asset["local_file"]),
+                audio=audio,
+                label=label,
+                visual_start_sec=visual_start,
+                audio_start_sec=audio_start,
+            )
+            for asset, audio, label, visual_start, audio_start in zip(
+                assets, args.audio, args.label, visual_starts, starts, strict=True
+            )
+        ]
+        probe = render_short(paths, scenes, args.output)
+        description = args.description.strip()
+        credits = pexels_attribution_block(assets)
+        description = f"{description}\n\n{credits}" if description else credits
+        video_id = None
+        if args.register:
+            video_id = register_video(
+                repository,
+                args.output,
+                kind="short",
+                title=args.title,
+                description=description,
+                tags=args.tag,
+                theme=theme,
+                privacy_status="private",
+            )
+            repository.mark_pexels_assets_used([str(asset["id"]) for asset in assets])
+        print(
+            json.dumps(
+                {
+                    "output": str(args.output.resolve()),
+                    "probe": probe.__dict__,
+                    "video_id": video_id,
+                    "pexels_assets": [asset["id"] for asset in assets],
+                    "description": description,
+                },
+                ensure_ascii=False,
                 indent=2,
             )
         )

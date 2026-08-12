@@ -433,6 +433,20 @@ class Repository:
                 ).fetchall()
             return [dict(row) for row in rows]
 
+    def mark_pexels_assets_used(self, asset_ids: list[str]) -> None:
+        if not asset_ids:
+            return
+        placeholders = ", ".join("?" for _ in asset_ids)
+        with self.connect() as connection:
+            connection.execute(
+                f"""
+                UPDATE pexels_assets
+                SET use_count = use_count + 1, last_used_at = ?
+                WHERE id IN ({placeholders})
+                """,
+                (utc_now(), *asset_ids),
+            )
+
     def register_video(self, values: dict[str, Any]) -> str:
         now = utc_now()
         video_id = values.get("id") or f"video_{uuid.uuid4().hex}"

@@ -215,6 +215,32 @@ def fetch_theme_assets(
     return cached
 
 
+def cached_theme_scenes(repository: Repository, theme: str, *, count: int = 5) -> list[dict]:
+    assets = [asset for asset in repository.pexels_assets(theme) if Path(asset["local_file"]).is_file()]
+    if len(assets) < count:
+        raise RuntimeError(f"Theme {theme} needs {count} cached Pexels videos; found {len(assets)}")
+    selected: list[dict] = []
+    seen_queries: set[str] = set()
+    for asset in assets:
+        query = str(asset["search_query"])
+        if query in seen_queries:
+            continue
+        selected.append(asset)
+        seen_queries.add(query)
+        if len(selected) == count:
+            break
+    if len(selected) < count:
+        raise RuntimeError(f"Theme {theme} needs {count} distinct Pexels scene queries")
+    return selected
+
+
+def pexels_attribution_block(assets: list[dict]) -> str:
+    lines = ["Visual credits (Pexels):"]
+    lines.extend(str(asset["attribution_text"]) for asset in assets)
+    lines.append(f"License: {LICENSE_URL}")
+    return "\n".join(lines)
+
+
 def _allowed_media_url(value: object) -> bool:
     if not isinstance(value, str):
         return False

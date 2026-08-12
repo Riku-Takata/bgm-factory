@@ -99,3 +99,5 @@ def test_pexels_asset_metadata_is_idempotent(tmp_path: Path) -> None:
     assert repository.upsert_pexels_asset(values) == "pexels_123"
     assert repository.pexels_asset_ids() == {123}
     assert len(repository.pexels_assets("summer_drive")) == 1
+    repository.mark_pexels_assets_used(["pexels_123"])
+    assert repository.pexels_assets("summer_drive")[0]["use_count"] == 1
