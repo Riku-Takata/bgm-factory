@@ -8,6 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from .config import AppConfig, load_yaml
 from .db import Repository
 from .paths import ServerPaths
+from .production import create_daily_short
 from .prompt import build_prompt
 from .youtube_analytics import collect_youtube_analytics
 from .youtube_uploader import upload_next
@@ -77,9 +78,24 @@ def upload_next_job(paths: ServerPaths, config: AppConfig, repository: Repositor
     try:
         result = upload_next(paths, config, repository)
         if result:
-            logger.info("youtube private upload completed result=%s", result)
+            logger.info("youtube upload completed result=%s", result)
     except Exception:
-        logger.exception("youtube private upload failed")
+        logger.exception("youtube upload failed")
+
+
+def create_daily_short_job(
+    paths: ServerPaths, config: AppConfig, repository: Repository
+) -> None:
+    try:
+        result = create_daily_short(
+            paths,
+            config,
+            repository,
+            run_date=datetime.now(config.timezone).date(),
+        )
+        logger.info("daily Short created result=%s", result)
+    except Exception:
+        logger.exception("daily Short creation failed")
 
 
 def create_scheduler(
@@ -93,6 +109,16 @@ def create_scheduler(
         minute=config.schedule.generation_minute,
         args=(paths, config, repository),
         id="daily_generation",
+        coalesce=True,
+        max_instances=1,
+    )
+    scheduler.add_job(
+        create_daily_short_job,
+        "cron",
+        hour=config.schedule.production_hour,
+        minute=config.schedule.production_minute,
+        args=(paths, config, repository),
+        id="daily_short_production",
         coalesce=True,
         max_instances=1,
     )

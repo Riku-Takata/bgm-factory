@@ -349,6 +349,44 @@ class Repository:
                 tuple(values.values()),
             )
 
+    def bgm_assets(self, theme: str | None = None) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            if theme:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM bgm_assets WHERE theme = ? AND status = 'accepted'
+                    ORDER BY created_at DESC
+                    """,
+                    (theme,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM bgm_assets WHERE status = 'accepted'
+                    ORDER BY created_at DESC
+                    """
+                ).fetchall()
+            return [dict(row) for row in rows]
+
+    def schedule_run_exists(self, schedule_name: str, run_date: date) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM schedule_runs WHERE schedule_name = ? AND run_date = ?",
+                (schedule_name, run_date.isoformat()),
+            ).fetchone()
+            return row is not None
+
+    def record_schedule_run(self, schedule_name: str, run_date: date) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO schedule_runs(schedule_name, run_date, created_at)
+                VALUES (?, ?, ?)
+                """,
+                (schedule_name, run_date.isoformat(), utc_now()),
+            )
+            return cursor.rowcount == 1
+
     def queue_stats(self) -> dict[str, int]:
         stats = {state: 0 for state in ("queued", "waiting_gpu", "running", "completed", "failed")}
         with self.connect() as connection:

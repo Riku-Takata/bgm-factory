@@ -65,6 +65,8 @@ class ScheduleSettings(BaseModel):
     enabled: bool = True
     generation_hour: int = Field(default=3, ge=0, le=23)
     generation_minute: int = Field(default=15, ge=0, le=59)
+    production_hour: int = Field(default=6, ge=0, le=23)
+    production_minute: int = Field(default=0, ge=0, le=59)
     cleanup_hour: int = Field(default=4, ge=0, le=23)
     cleanup_minute: int = Field(default=0, ge=0, le=59)
 
@@ -91,6 +93,7 @@ class PexelsSettings(BaseModel):
     max_duration_sec: int = Field(default=90, ge=1, le=3600)
     max_download_mb: int = Field(default=150, ge=1, le=1000)
     request_timeout_sec: float = Field(default=30, ge=1, le=300)
+    daily_downloads: int = Field(default=2, ge=0, le=20)
 
 
 class YouTubeSettings(BaseModel):

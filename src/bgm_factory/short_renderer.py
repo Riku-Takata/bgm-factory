@@ -82,12 +82,28 @@ def _segment_filter(
     width: int,
     height: int,
     still: bool,
+    title_text: str,
+    marker_text: str | None,
 ) -> str:
     frames = round(duration_sec * fps)
     fade_out = max(0.0, duration_sec - 0.15)
-    title = _drawtext("SUMMER DRIVE")
+    box_x, box_y = round(width * 0.065), round(height * 0.755)
+    box_width, box_height = round(width * 0.87), round(height * 0.177)
+    text_x = round(width * 0.102)
+    title_y, label_y = round(height * 0.784), round(height * 0.831)
+    title_size, label_size = round(width * 0.065), round(width * 0.035)
+    marker_x, marker_y, marker_size = round(width * 0.07), round(height * 0.057), round(width * 0.026)
+    progress_x, progress_y = round(width * 0.12), round(height * 0.88)
+    progress_width, progress_height = round(width * 0.759), max(4, round(height * 0.006))
+    title = _drawtext(title_text.upper())
     label = _drawtext(f"{index:02d} / {scene_count:02d}  {scene.label.upper()}")
-    marker = _drawtext("PRIVATE VISUAL PIPELINE TEST")
+    marker_filter = ""
+    if marker_text:
+        marker = _drawtext(marker_text)
+        marker_filter = (
+            f"drawtext=font='Arial':text='{marker}':x={marker_x}:y={marker_y}:"
+            f"fontsize={marker_size}:fontcolor=white@0.75,"
+        )
     if still:
         visual = (
             "[0:v]scale=1188:2112:force_original_aspect_ratio=increase,"
@@ -104,18 +120,20 @@ def _segment_filter(
     return visual + (
         "eq=saturation=1.06:contrast=1.02,"
         f"fade=t=in:st=0:d=0.15,fade=t=out:st={fade_out:.2f}:d=0.15,"
-        "drawbox=x=70:y=1450:w=940:h=340:color=black@0.38:t=fill,"
-        f"drawtext=font='Arial':text='{marker}':x=76:y=110:"
-        "fontsize=28:fontcolor=white@0.75,"
-        f"drawtext=font='Arial':text='{title}':x=110:y=1505:"
-        "fontsize=70:fontcolor=white,"
-        f"drawtext=font='Arial':text='{label}':x=114:y=1595:"
-        "fontsize=38:fontcolor=white@0.92[base];"
+        f"drawbox=x={box_x}:y={box_y}:w={box_width}:h={box_height}:"
+        "color=black@0.38:t=fill,"
+        f"{marker_filter}"
+        f"drawtext=font='Arial':text='{title}':x={text_x}:y={title_y}:"
+        f"fontsize={title_size}:fontcolor=white,"
+        f"drawtext=font='Arial':text='{label}':x={text_x}:y={label_y}:"
+        f"fontsize={label_size}:fontcolor=white@0.92,"
+        f"drawbox=x={progress_x}:y={progress_y}:w={progress_width}:h={progress_height}:"
+        "color=white@0.24:t=fill,"
+        f"drawbox=x={progress_x}:y={progress_y}:"
+        f"w='{progress_width}*min(t/{duration_sec:.3f},1)':h={progress_height}:"
+        "color=white@0.78:t=fill[v];"
         f"[1:a]atrim=duration={duration_sec:.3f},asetpts=N/SR/TB,"
-        f"afade=t=in:st=0:d=0.15,afade=t=out:st={fade_out:.2f}:d=0.15,"
-        "loudnorm=I=-14:TP=-1.5:LRA=11,asplit=2[a][viz];"
-        f"[viz]showwaves=s=820x96:mode=line:colors=white@0.70:r={fps},"
-        "format=rgba[wave];[base][wave]overlay=130:1680:shortest=1[v]"
+        f"afade=t=in:st=0:d=0.15,afade=t=out:st={fade_out:.2f}:d=0.15[a]"
     )
 
 
@@ -156,6 +174,9 @@ def render_short(
     fps: int = 30,
     width: int = 1080,
     height: int = 1920,
+    title_text: str = "BGM FACTORY",
+    marker_text: str | None = None,
+    video_encoder: str = "libx264",
     runner: CommandRunner = _run,
 ) -> MediaProbe:
     _validate_scenes(scenes)
@@ -173,6 +194,11 @@ def render_short(
                 "-ss",
                 f"{scene.visual_start_sec:.3f}",
             ]
+            encode_options = (
+                ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "20"]
+                if video_encoder == "h264_nvenc"
+                else ["-c:v", "libx264", "-preset", "medium", "-crf", "20"]
+            )
             runner(
                 [
                     ffmpeg,
@@ -197,6 +223,8 @@ def render_short(
                         width=width,
                         height=height,
                         still=still,
+                        title_text=title_text,
+                        marker_text=marker_text,
                     ),
                     "-map",
                     "[v]",
@@ -204,12 +232,7 @@ def render_short(
                     "[a]",
                     "-frames:v",
                     str(round(duration_sec * fps)),
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "medium",
-                    "-crf",
-                    "20",
+                    *encode_options,
                     "-pix_fmt",
                     "yuv420p",
                     "-r",

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 from .pexels import cached_theme_scenes, fetch_theme_assets, pexels_attribution_block
+from .production import create_daily_short
 from .prompt import build_prompt
 from .runtime import initialize_runtime
 from .service import process_next_job
@@ -70,6 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
     pexels_fetch.add_argument("--theme", default=None)
     pexels_fetch.add_argument("--limit", type=int, default=5)
     pexels_fetch.add_argument("--per-query", type=int, default=12)
+    produce = commands.add_parser(
+        "produce-daily-short", help="render and register one production Short"
+    )
+    produce.add_argument("--date", type=date.fromisoformat, default=None)
+    produce.add_argument("--theme", default=None)
     commands.add_parser("youtube-collect", help="collect YouTube statistics and Analytics")
     return parser
 
@@ -241,6 +248,29 @@ def main() -> None:
                         }
                         for asset in assets
                     ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    if args.command == "produce-daily-short":
+        result = create_daily_short(
+            paths,
+            config,
+            repository,
+            run_date=args.date or date.today(),  # noqa: DTZ011 - CLI date uses server local date.
+            theme=args.theme,
+        )
+        print(
+            json.dumps(
+                {
+                    "video_id": result.video_id,
+                    "output": str(result.output_file),
+                    "title": result.title,
+                    "privacy_status": result.privacy_status,
+                    "pexels_assets": result.pexels_asset_ids,
+                    "probe": result.probe.__dict__,
                 },
                 ensure_ascii=False,
                 indent=2,

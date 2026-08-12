@@ -192,13 +192,17 @@ def fetch_theme_assets(
     theme: str,
     limit: int = 5,
     per_query: int = 12,
+    query_offset: int = 0,
 ) -> list[CachedPexelsAsset]:
     if limit < 1:
         raise ValueError("limit must be at least 1")
     existing = repository.pexels_asset_ids()
     cached: list[CachedPexelsAsset] = []
+    queries = theme_video_queries(paths, theme)
+    offset = query_offset % len(queries)
+    queries = queries[offset:] + queries[:offset]
     with configured_client(config) as pexels:
-        for query in theme_video_queries(paths, theme):
+        for query in queries:
             for video in pexels.search_videos(query, per_page=per_query):
                 if int(video["id"]) in existing:
                     continue
