@@ -2,7 +2,7 @@
 
 YouTube Shorts / 長尺Mix向けのBGM Assetを、Windows 11 + NVIDIA GPU上でローカル生成するシステムです。
 
-このリポジトリは現在「環境基盤」までを実装しています。Python環境、ACE-Step 1.5、FFmpeg、GPU、保存先、常駐Workerの死活監視を準備し、BGM生成ロジックは次フェーズで追加します。YouTubeへの自動投稿は初期状態で無効です。
+現在は、Python環境、ACE-Step 1.5、FFmpeg、SQLiteジョブキュー、GPU ResourceGuard、BGM生成、音響解析、Hook/Loop/Qualityスコア、Asset採否判定、日次スケジューラまで実装しています。YouTubeへの自動投稿は無効です。
 
 ## サーバー上の配置
 
@@ -35,21 +35,47 @@ D:\HomeServer\apps\bgm-factory\scripts\healthcheck.ps1
 D:\HomeServer\apps\bgm-factory\scripts\stop.ps1
 ```
 
-常時起動タスクの登録は管理者PowerShellで次を実行します。
+HomeServer通常モードと連動して起動・停止します。
 
 ```powershell
-D:\HomeServer\apps\bgm-factory\scripts\register-task.ps1
+D:\HomeServer\scripts\start-normal.ps1
+D:\HomeServer\scripts\stop-normal.ps1
 ```
+
+Windows Task Schedulerへの登録は不要です。
+
+## ジョブ操作
+
+状態確認:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe status
+```
+
+1件をキューへ追加:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe enqueue --theme summer_drive --count 1
+```
+
+Workerを使わず次のジョブを1つ処理:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe run-once
+```
+
+通常はWorkerがキューを監視します。毎日03:15に40候補のJobを作成し、GPU条件を満たす場合のみ処理します。04:00にRejected Candidateと一時ファイルを整理します。
 
 ## 初回に人が行う設定
 
-1. ACE-Step APIを一度起動し、モデルのダウンロード完了と生成テストを確認する。
-2. YouTube連携フェーズでGoogle CloudのOAuthクライアントを作り、`secrets\client_secret.json`を配置する。
-3. Private投稿の動作確認後にのみ自動アップロードを有効にする。
+1. YouTube連携フェーズでGoogle CloudのOAuthクライアントを作り、`secrets\client_secret.json`を配置する。
+2. Private投稿の動作確認後にのみ自動アップロードを有効にする。
 
 ## 方針
 
 - ACE-Step APIは `127.0.0.1:8001` のみにbindします。
 - RTX 3060 Ti 8GB向けに2B turbo + 0.6B LM + PyTorch backend + CPU offloadを初期値とします。
-- GPU使用率35%超、空きVRAM 6GB未満、温度78℃超では将来の生成Jobを開始しません。
+- GPU使用率35%超、モデル未ロード時の空きVRAM 6GB未満、モデルロード済み時の空きVRAM 1.2GB未満、温度78℃超では新しい生成を開始しません。
+- Accepted Assetは `data\app-data\bgm-factory\assets` に永久保存します。
+- Rejected Candidateは7日後に削除します。
 - `.env`、OAuth情報、モデル、生成音源、DB、ログはGit管理外です。

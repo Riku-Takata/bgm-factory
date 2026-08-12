@@ -104,11 +104,7 @@ function Stop-ProcessFromPidFile {
     if ($processId -match '^\d+$') {
         $process = Get-Process -Id ([int]$processId) -ErrorAction SilentlyContinue
         if ($process) {
-            Stop-Process -Id $process.Id -ErrorAction SilentlyContinue
-            $null = $process.WaitForExit(15000)
-            if (-not $process.HasExited) {
-                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            }
+            & taskkill.exe /PID $process.Id /T /F *> $null
         }
     }
     Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue

@@ -12,6 +12,7 @@ dependencies = [
   "apscheduler>=3.11,<4",
   "httpx>=0.28,<1",
   "pydantic-settings>=2.10,<3",
+  "python-dotenv>=1.1,<2",
   "pyyaml>=6.0,<7",
   "structlog>=25.4,<26",
 ]
@@ -36,6 +37,7 @@ dev = [
 
 [project.scripts]
 bgm-factory-health = "bgm_factory.health:main"
+bgm-factory = "bgm_factory.cli:main"
 bgm-factory-worker = "bgm_factory.worker:main"
 
 [tool.hatch.build.targets.wheel]
@@ -47,4 +49,3 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-

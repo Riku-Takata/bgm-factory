@@ -57,6 +57,7 @@ dependencies = [
     { name = "apscheduler" },
     { name = "httpx" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "structlog" },
 ]
@@ -93,6 +94,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.10,<3" },
     { name = "pyloudnorm", marker = "extra == 'audio'", specifier = ">=0.1.1,<1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<9" },
+    { name = "python-dotenv", specifier = ">=1.1,<2" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12,<1" },
     { name = "scipy", marker = "extra == 'audio'", specifier = ">=1.15,<2" },
