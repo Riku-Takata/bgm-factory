@@ -2,6 +2,6 @@
 Initialize-BgmFactoryDirectories
 
 Stop-ProcessFromPidFile -PidFile (Join-Path $script:LogRoot "worker.pid")
+Stop-ProcessFromPidFile -PidFile (Join-Path $script:LogRoot "dashboard.pid")
 Stop-ProcessFromPidFile -PidFile (Join-Path $script:LogRoot "ace-step.pid")
 Write-Host "BGM Factory processes stopped."
-

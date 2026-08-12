@@ -9,6 +9,8 @@ from .config import AppConfig, load_yaml
 from .db import Repository
 from .paths import ServerPaths
 from .prompt import build_prompt
+from .youtube_analytics import collect_youtube_analytics
+from .youtube_uploader import upload_next
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,29 @@ def cleanup_runtime(paths: ServerPaths, config: AppConfig) -> int:
     return removed
 
 
+def collect_analytics_job(
+    paths: ServerPaths, config: AppConfig, repository: Repository
+) -> None:
+    if not config.analytics.enabled:
+        return
+    try:
+        result = collect_youtube_analytics(paths, config, repository)
+        logger.info("youtube analytics collected result=%s", result)
+    except Exception:
+        logger.exception("youtube analytics collection failed")
+
+
+def upload_next_job(paths: ServerPaths, config: AppConfig, repository: Repository) -> None:
+    if not config.app.auto_upload:
+        return
+    try:
+        result = upload_next(paths, config, repository)
+        if result:
+            logger.info("youtube private upload completed result=%s", result)
+    except Exception:
+        logger.exception("youtube private upload failed")
+
+
 def create_scheduler(
     paths: ServerPaths, config: AppConfig, repository: Repository
 ) -> BackgroundScheduler:
@@ -78,6 +103,25 @@ def create_scheduler(
         minute=config.schedule.cleanup_minute,
         args=(paths, config),
         id="daily_cleanup",
+        coalesce=True,
+        max_instances=1,
+    )
+    scheduler.add_job(
+        collect_analytics_job,
+        "cron",
+        hour=config.analytics.collection_hour,
+        minute=config.analytics.collection_minute,
+        args=(paths, config, repository),
+        id="daily_youtube_analytics",
+        coalesce=True,
+        max_instances=1,
+    )
+    scheduler.add_job(
+        upload_next_job,
+        "interval",
+        minutes=config.youtube.upload_poll_minutes,
+        args=(paths, config, repository),
+        id="youtube_upload_queue",
         coalesce=True,
         max_instances=1,
     )

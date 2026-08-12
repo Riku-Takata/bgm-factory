@@ -69,6 +69,29 @@ class ScheduleSettings(BaseModel):
     cleanup_minute: int = Field(default=0, ge=0, le=59)
 
 
+class AnalyticsSettings(BaseModel):
+    enabled: bool = True
+    collection_hour: int = Field(default=5, ge=0, le=23)
+    collection_minute: int = Field(default=0, ge=0, le=59)
+    lookback_days: int = Field(default=90, ge=1, le=365)
+
+
+class DashboardSettings(BaseModel):
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = Field(default=8787, ge=1, le=65535)
+
+
+class YouTubeSettings(BaseModel):
+    region: str = "JP"
+    category_id: int = 10
+    upload_privacy: str = "private"
+    expected_channel_id: str | None = None
+    upload_poll_minutes: int = Field(default=15, ge=1, le=1440)
+    client_secret_file: str = "client_secret.json"
+    token_file: str = "token.json"
+
+
 class AppConfig(BaseModel):
     app: AppSettings = AppSettings()
     generation: GenerationSettings = GenerationSettings()
@@ -79,9 +102,11 @@ class AppConfig(BaseModel):
     asset: AssetSettings = AssetSettings()
     storage: StorageSettings = StorageSettings()
     schedule: ScheduleSettings = ScheduleSettings()
+    analytics: AnalyticsSettings = AnalyticsSettings()
+    dashboard: DashboardSettings = DashboardSettings()
     shorts: dict = {}
     long_mix: dict = {}
-    youtube: dict = {}
+    youtube: YouTubeSettings = YouTubeSettings()
 
     @property
     def timezone(self) -> ZoneInfo:

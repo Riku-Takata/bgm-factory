@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from .prompt import build_prompt
 from .runtime import initialize_runtime
 from .service import process_next_job
+from .youtube_analytics import collect_youtube_analytics
+from .youtube_auth import authorization_summary, authorize, connection_status
+from .youtube_uploader import register_video, upload_next
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,6 +22,21 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("run-once", help="process the next queued job")
     status = commands.add_parser("status", help="show queue and recent jobs")
     status.add_argument("--limit", type=int, default=10)
+    youtube_auth = commands.add_parser("youtube-auth", help="authorize the YouTube channel")
+    youtube_auth.add_argument(
+        "--no-browser", action="store_true", help="print the authorization URL only"
+    )
+    commands.add_parser("youtube-status", help="verify the authorized YouTube channel")
+    register = commands.add_parser("video-register", help="register a rendered video")
+    register.add_argument("--file", type=Path, required=True)
+    register.add_argument("--kind", choices=("short", "long_mix"), required=True)
+    register.add_argument("--title", required=True)
+    register.add_argument("--description", default="")
+    register.add_argument("--tag", action="append", default=[])
+    register.add_argument("--theme", default=None)
+    upload = commands.add_parser("youtube-upload-next", help="upload one video as private")
+    upload.add_argument("--confirm-private", action="store_true", required=True)
+    commands.add_parser("youtube-collect", help="collect YouTube statistics and Analytics")
     return parser
 
 
@@ -42,6 +61,37 @@ def main() -> None:
             "guard": decision.__dict__ if decision else None,
         }
         print(json.dumps(payload, default=str, indent=2))
+        return
+    if args.command == "youtube-auth":
+        credentials = authorize(paths, config, open_browser=not args.no_browser)
+        print(json.dumps(authorization_summary(credentials), indent=2))
+        return
+    if args.command == "youtube-status":
+        status = connection_status(paths, config)
+        print(json.dumps(status.to_dict(), indent=2, ensure_ascii=False))
+        raise SystemExit(0 if status.authorized else 1)
+    if args.command == "video-register":
+        video_id = register_video(
+            repository,
+            args.file,
+            kind=args.kind,
+            title=args.title,
+            description=args.description,
+            tags=args.tag,
+            theme=args.theme,
+            privacy_status="private",
+        )
+        print(video_id)
+        return
+    if args.command == "youtube-upload-next":
+        if not args.confirm_private:
+            raise SystemExit("--confirm-private is required")
+        result = upload_next(paths, config, repository)
+        print(json.dumps({"uploaded": result}, indent=2))
+        return
+    if args.command == "youtube-collect":
+        result = collect_youtube_analytics(paths, config, repository)
+        print(json.dumps(result, indent=2))
         return
     print(
         json.dumps(

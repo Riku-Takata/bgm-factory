@@ -13,6 +13,7 @@ $script:FfmpegBin = Join-Path $script:ToolsRoot "ffmpeg\bin"
 $script:AppPython = Join-Path $script:AppRoot ".venv\Scripts\python.exe"
 $script:AppHealth = Join-Path $script:AppRoot ".venv\Scripts\bgm-factory-health.exe"
 $script:AppWorker = Join-Path $script:AppRoot ".venv\Scripts\bgm-factory-worker.exe"
+$script:AppDashboard = Join-Path $script:AppRoot ".venv\Scripts\bgm-factory-dashboard.exe"
 $script:AceStepApi = Join-Path $script:AceStepRoot ".venv\Scripts\acestep-api.exe"
 
 function Initialize-BgmFactoryDirectories {

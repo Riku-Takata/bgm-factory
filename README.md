@@ -1,33 +1,28 @@
 # BGM Factory
 
-YouTube Shorts / 長尺Mix向けのBGM Assetを、Windows 11 + NVIDIA GPU上でローカル生成するシステムです。
+YouTube Shorts／長尺Mix向けのBGMをローカル生成・評価し、動画のPrivate投稿と実績収集を行うWindowsサーバーシステムです。
 
-現在は、Python環境、ACE-Step 1.5、FFmpeg、SQLiteジョブキュー、GPU ResourceGuard、BGM生成、音響解析、Hook/Loop/Qualityスコア、Asset採否判定、日次スケジューラまで実装しています。YouTubeへの自動投稿は無効です。
-
-## サーバー上の配置
+## 配置
 
 | 用途 | パス |
 |---|---|
 | コード | `D:\HomeServer\apps\bgm-factory` |
-| Python/uv等のツール | `D:\HomeServer\tools` |
-| ACE-Step・モデル・DB・生成物 | `D:\HomeServer\data\app-data\bgm-factory` |
-| 実行設定・OAuth秘密情報 | `D:\HomeServer\config\bgm-factory` |
+| モデル・DB・生成物 | `D:\HomeServer\data\app-data\bgm-factory` |
+| 設定・OAuth秘密情報 | `D:\HomeServer\config\bgm-factory` |
 | ログ・PID・heartbeat | `D:\HomeServer\logs\bgm-factory` |
 
-仕様書の `D:\HomeServer\data\files\youtube-bgm` は参照専用で、実装や生成物を置きません。
+仕様書の `D:\HomeServer\data\files\youtube-bgm` は参照専用です。OAuthクライアントとトークンはリポジトリ外の `config\bgm-factory\secrets` に保存します。
 
-## 初期化
+## 起動・停止
 
-PowerShellで以下を実行します。
+HomeServerの通常モードと連動して、ACE-Step API、生成ワーカー、Analyticsダッシュボードを起動・停止します。
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-D:\HomeServer\apps\bgm-factory\scripts\install.ps1
+D:\HomeServer\scripts\start-normal.ps1
+D:\HomeServer\scripts\stop-normal.ps1
 ```
 
-ACE-Stepの依存関係は大きいため、初回同期には時間と数GBの通信が発生します。モデル本体はACE-Step API初回起動時にダウンロードされます。
-
-## 起動と確認
+単体操作:
 
 ```powershell
 D:\HomeServer\apps\bgm-factory\scripts\start.ps1
@@ -35,47 +30,50 @@ D:\HomeServer\apps\bgm-factory\scripts\healthcheck.ps1
 D:\HomeServer\apps\bgm-factory\scripts\stop.ps1
 ```
 
-HomeServer通常モードと連動して起動・停止します。
+ダッシュボードはサーバー内の `http://127.0.0.1:8787/` で開きます。
 
-```powershell
-D:\HomeServer\scripts\start-normal.ps1
-D:\HomeServer\scripts\stop-normal.ps1
-```
-
-Windows Task Schedulerへの登録は不要です。
-
-## ジョブ操作
-
-状態確認:
-
-```powershell
-D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe status
-```
-
-1件をキューへ追加:
+## BGM生成
 
 ```powershell
 D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe enqueue --theme summer_drive --count 1
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe status
 ```
 
-Workerを使わず次のジョブを1つ処理:
+生成候補は音量、BPM、フック、ループ、品質を解析し、基準を満たしたものだけをAsset化します。毎日03:15に生成し、04:00に一時ファイルを整理します。
+
+## YouTube接続
+
+OAuth認証と接続確認:
 
 ```powershell
-D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe run-once
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-auth
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-status
 ```
 
-通常はWorkerがキューを監視します。毎日03:15に40候補のJobを作成し、GPU条件を満たす場合のみ処理します。04:00にRejected Candidateと一時ファイルを整理します。
+レンダリング済み動画を登録し、1本だけPrivate投稿:
 
-## 初回に人が行う設定
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe video-register `
+  --file D:\path\video.mp4 --kind short --title "BGM Set #1" --tag bgm --tag shorts
 
-1. YouTube連携フェーズでGoogle CloudのOAuthクライアントを作り、`secrets\client_secret.json`を配置する。
-2. Private投稿の動作確認後にのみ自動アップロードを有効にする。
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-upload-next --confirm-private
+```
 
-## 方針
+動画はSHA-256で重複判定します。アップロード結果が不明な場合は `uncertain` で停止し、自動再投稿しません。`auto_upload: true` にすると15分ごとに登録済み動画を1本ずつPrivate投稿します。`auto_publish` は初期状態では無効です。
 
-- ACE-Step APIは `127.0.0.1:8001` のみにbindします。
-- RTX 3060 Ti 8GB向けに2B turbo + 0.6B LM + PyTorch backend + CPU offloadを初期値とします。
-- GPU使用率35%超、モデル未ロード時の空きVRAM 6GB未満、モデルロード済み時の空きVRAM 1.2GB未満、温度78℃超では新しい生成を開始しません。
-- Accepted Assetは `data\app-data\bgm-factory\assets` に永久保存します。
-- Rejected Candidateは7日後に削除します。
-- `.env`、OAuth情報、モデル、生成音源、DB、ログはGit管理外です。
+## Analytics
+
+手動収集:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-collect
+```
+
+毎日05:00にYouTube Data APIとYouTube Analytics APIから再生数、高評価、コメント、Engaged views、総再生時間、平均視聴時間、平均視聴率、共有、登録者増加をSQLiteへ保存します。
+
+## 安全設定
+
+- ACE-Step APIとダッシュボードは `127.0.0.1` のみにbindします。
+- YouTube投稿先チャンネルIDをサーバー設定に固定し、一致しない認証では投稿しません。
+- 初期投稿はPrivate限定です。
+- `.env`、OAuth情報、モデル、生成物、DB、ログはGit管理外です。

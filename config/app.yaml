@@ -63,7 +63,20 @@ schedule:
   cleanup_hour: 4
   cleanup_minute: 0
 
+analytics:
+  enabled: true
+  collection_hour: 5
+  collection_minute: 0
+  lookback_days: 90
+
+dashboard:
+  enabled: true
+  host: 127.0.0.1
+  port: 8787
+
 youtube:
   region: JP
   category_id: 10
   upload_privacy: private
+  expected_channel_id:
+  upload_poll_minutes: 15

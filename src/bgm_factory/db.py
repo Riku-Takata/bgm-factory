@@ -24,6 +24,22 @@ class GenerationJob:
     error_message: str | None
 
 
+@dataclass(frozen=True)
+class VideoRecord:
+    id: str
+    kind: str
+    title: str
+    description: str
+    tags_json: str
+    theme: str | None
+    output_file: str
+    content_hash: str
+    upload_state: str
+    privacy_status: str
+    youtube_video_id: str | None
+    error_message: str | None
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS bgm_assets (
     id TEXT PRIMARY KEY,
@@ -80,6 +96,54 @@ CREATE TABLE IF NOT EXISTS schedule_runs (
 CREATE TABLE IF NOT EXISTS counters (
     name TEXT PRIMARY KEY,
     value INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS youtube_videos (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    tags_json TEXT NOT NULL,
+    theme TEXT,
+    output_file TEXT NOT NULL,
+    content_hash TEXT NOT NULL UNIQUE,
+    upload_state TEXT NOT NULL DEFAULT 'pending',
+    privacy_status TEXT NOT NULL DEFAULT 'private',
+    youtube_video_id TEXT UNIQUE,
+    upload_attempted_at TEXT,
+    uploaded_at TEXT,
+    published_at TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_youtube_videos_upload_queue
+ON youtube_videos(upload_state, created_at);
+
+CREATE TABLE IF NOT EXISTS youtube_video_snapshots (
+    youtube_video_id TEXT NOT NULL,
+    collected_at TEXT NOT NULL,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    like_count INTEGER NOT NULL DEFAULT 0,
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(youtube_video_id, collected_at)
+);
+
+CREATE TABLE IF NOT EXISTS youtube_metrics_daily (
+    youtube_video_id TEXT NOT NULL,
+    metric_date TEXT NOT NULL,
+    views INTEGER NOT NULL DEFAULT 0,
+    engaged_views INTEGER NOT NULL DEFAULT 0,
+    estimated_minutes_watched REAL NOT NULL DEFAULT 0,
+    average_view_duration REAL NOT NULL DEFAULT 0,
+    average_view_percentage REAL NOT NULL DEFAULT 0,
+    likes INTEGER NOT NULL DEFAULT 0,
+    comments INTEGER NOT NULL DEFAULT 0,
+    shares INTEGER NOT NULL DEFAULT 0,
+    subscribers_gained INTEGER NOT NULL DEFAULT 0,
+    collected_at TEXT NOT NULL,
+    PRIMARY KEY(youtube_video_id, metric_date)
 );
 """
 
@@ -277,3 +341,221 @@ class Repository:
                 "SELECT * FROM generation_jobs ORDER BY created_at DESC LIMIT ?", (limit,)
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def register_video(self, values: dict[str, Any]) -> str:
+        now = utc_now()
+        video_id = values.get("id") or f"video_{uuid.uuid4().hex}"
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT id FROM youtube_videos WHERE content_hash = ?",
+                (values["content_hash"],),
+            ).fetchone()
+            if existing:
+                return str(existing["id"])
+            connection.execute(
+                """
+                INSERT INTO youtube_videos (
+                    id, kind, title, description, tags_json, theme, output_file,
+                    content_hash, upload_state, privacy_status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+                """,
+                (
+                    video_id,
+                    values["kind"],
+                    values["title"],
+                    values.get("description", ""),
+                    values.get("tags_json", "[]"),
+                    values.get("theme"),
+                    values["output_file"],
+                    values["content_hash"],
+                    values.get("privacy_status", "private"),
+                    now,
+                    now,
+                ),
+            )
+        return str(video_id)
+
+    def get_video(self, video_id: str) -> VideoRecord | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM youtube_videos WHERE id = ?", (video_id,)
+            ).fetchone()
+        return self._video_record(row)
+
+    def next_video_for_upload(self) -> VideoRecord | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM youtube_videos
+                WHERE youtube_video_id IS NULL AND upload_state = 'pending'
+                ORDER BY created_at
+                LIMIT 1
+                """
+            ).fetchone()
+        return self._video_record(row)
+
+    def begin_video_upload(self, video_id: str) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE youtube_videos
+                SET upload_state = 'uploading', upload_attempted_at = ?,
+                    error_message = NULL, updated_at = ?
+                WHERE id = ? AND youtube_video_id IS NULL AND upload_state = 'pending'
+                """,
+                (utc_now(), utc_now(), video_id),
+            )
+            return cursor.rowcount == 1
+
+    def finish_video_upload(self, video_id: str, youtube_video_id: str) -> None:
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE youtube_videos
+                SET upload_state = 'completed', youtube_video_id = ?, uploaded_at = ?,
+                    error_message = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (youtube_video_id, now, now, video_id),
+            )
+
+    def mark_video_upload_uncertain(self, video_id: str, error: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE youtube_videos
+                SET upload_state = 'uncertain', error_message = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (error, utc_now(), video_id),
+            )
+
+    def uploaded_videos(self) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM youtube_videos
+                WHERE youtube_video_id IS NOT NULL
+                ORDER BY uploaded_at DESC
+                """
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def record_video_snapshot(
+        self,
+        youtube_video_id: str,
+        view_count: int,
+        like_count: int,
+        comment_count: int,
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO youtube_video_snapshots (
+                    youtube_video_id, collected_at, view_count, like_count, comment_count
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (youtube_video_id, utc_now(), view_count, like_count, comment_count),
+            )
+
+    def upsert_daily_metric(self, values: dict[str, Any]) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO youtube_metrics_daily (
+                    youtube_video_id, metric_date, views, engaged_views,
+                    estimated_minutes_watched, average_view_duration,
+                    average_view_percentage, likes, comments, shares,
+                    subscribers_gained, collected_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(youtube_video_id, metric_date) DO UPDATE SET
+                    views = excluded.views,
+                    engaged_views = excluded.engaged_views,
+                    estimated_minutes_watched = excluded.estimated_minutes_watched,
+                    average_view_duration = excluded.average_view_duration,
+                    average_view_percentage = excluded.average_view_percentage,
+                    likes = excluded.likes,
+                    comments = excluded.comments,
+                    shares = excluded.shares,
+                    subscribers_gained = excluded.subscribers_gained,
+                    collected_at = excluded.collected_at
+                """,
+                (
+                    values["youtube_video_id"],
+                    values["metric_date"],
+                    values.get("views", 0),
+                    values.get("engaged_views", 0),
+                    values.get("estimated_minutes_watched", 0),
+                    values.get("average_view_duration", 0),
+                    values.get("average_view_percentage", 0),
+                    values.get("likes", 0),
+                    values.get("comments", 0),
+                    values.get("shares", 0),
+                    values.get("subscribers_gained", 0),
+                    utc_now(),
+                ),
+            )
+
+    def dashboard_data(self) -> dict[str, Any]:
+        with self.connect() as connection:
+            totals = connection.execute(
+                """
+                SELECT
+                    COALESCE(SUM(latest.view_count), 0) AS views,
+                    COALESCE(SUM(latest.like_count), 0) AS likes,
+                    COALESCE(SUM(latest.comment_count), 0) AS comments
+                FROM youtube_videos AS videos
+                LEFT JOIN youtube_video_snapshots AS latest
+                    ON latest.youtube_video_id = videos.youtube_video_id
+                   AND latest.collected_at = (
+                       SELECT MAX(s.collected_at)
+                       FROM youtube_video_snapshots AS s
+                       WHERE s.youtube_video_id = videos.youtube_video_id
+                   )
+                WHERE videos.youtube_video_id IS NOT NULL
+                """
+            ).fetchone()
+            daily = connection.execute(
+                """
+                SELECT metric_date, SUM(views) AS views,
+                       SUM(engaged_views) AS engaged_views,
+                       SUM(estimated_minutes_watched) AS watched_minutes
+                FROM youtube_metrics_daily
+                GROUP BY metric_date
+                ORDER BY metric_date
+                """
+            ).fetchall()
+            videos = connection.execute(
+                """
+                SELECT v.id, v.title, v.kind, v.youtube_video_id, v.upload_state,
+                       v.uploaded_at, COALESCE(s.view_count, 0) AS views,
+                       COALESCE(s.like_count, 0) AS likes,
+                       COALESCE(s.comment_count, 0) AS comments
+                FROM youtube_videos AS v
+                LEFT JOIN youtube_video_snapshots AS s
+                    ON s.youtube_video_id = v.youtube_video_id
+                   AND s.collected_at = (
+                       SELECT MAX(s2.collected_at)
+                       FROM youtube_video_snapshots AS s2
+                       WHERE s2.youtube_video_id = v.youtube_video_id
+                   )
+                ORDER BY COALESCE(s.view_count, 0) DESC, v.created_at DESC
+                """
+            ).fetchall()
+            states = connection.execute(
+                "SELECT upload_state, COUNT(*) AS count FROM youtube_videos GROUP BY upload_state"
+            ).fetchall()
+        return {
+            "totals": dict(totals),
+            "daily": [dict(row) for row in daily],
+            "videos": [dict(row) for row in videos],
+            "upload_states": {str(row["upload_state"]): int(row["count"]) for row in states},
+        }
+
+    @staticmethod
+    def _video_record(row: sqlite3.Row | None) -> VideoRecord | None:
+        if row is None:
+            return None
+        data = dict(row)
+        return VideoRecord(**{key: data[key] for key in VideoRecord.__dataclass_fields__})
