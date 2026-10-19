@@ -12,7 +12,9 @@ import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .config import load_config
 from .paths import ServerPaths
+from .youtube_auth import connection_status
 
 
 @dataclass
@@ -116,6 +118,16 @@ def check_worker(paths: ServerPaths) -> Check:
     return Check("worker", age <= 180, f"heartbeat age {age:.0f}s", required=False)
 
 
+def check_youtube(paths: ServerPaths) -> Check:
+    status = connection_status(paths, load_config(paths))
+    detail = (
+        f"{status.channel_title} ({status.channel_id})"
+        if status.authorized
+        else status.error or "not authorized"
+    )
+    return Check("youtube", status.authorized, detail, required=False)
+
+
 def run_checks() -> list[Check]:
     paths = ServerPaths.discover()
     for directory in paths.runtime_directories():
@@ -128,6 +140,7 @@ def run_checks() -> list[Check]:
         check_ace_step_install(paths),
         check_ace_step_api(),
         check_worker(paths),
+        check_youtube(paths),
     ]
 
 

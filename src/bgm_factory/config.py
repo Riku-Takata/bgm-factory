@@ -65,8 +65,106 @@ class ScheduleSettings(BaseModel):
     enabled: bool = True
     generation_hour: int = Field(default=3, ge=0, le=23)
     generation_minute: int = Field(default=15, ge=0, le=59)
+    production_hour: int = Field(default=6, ge=0, le=23)
+    production_minute: int = Field(default=0, ge=0, le=59)
+    production_times: list[str] = ["06:00", "13:00", "20:00"]
     cleanup_hour: int = Field(default=4, ge=0, le=23)
     cleanup_minute: int = Field(default=0, ge=0, le=59)
+
+    def parsed_production_times(self) -> list[tuple[int, int]]:
+        parsed: list[tuple[int, int]] = []
+        for value in self.production_times:
+            try:
+                hour_text, minute_text = value.split(":", maxsplit=1)
+                hour, minute = int(hour_text), int(minute_text)
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid production time: {value!r}") from exc
+            if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+                raise ValueError(f"Invalid production time: {value!r}")
+            parsed.append((hour, minute))
+        if len(set(parsed)) != len(parsed):
+            raise ValueError("Production times must be unique")
+        return parsed or [(self.production_hour, self.production_minute)]
+
+
+class AnalyticsSettings(BaseModel):
+    enabled: bool = True
+    collection_hour: int = Field(default=5, ge=0, le=23)
+    collection_minute: int = Field(default=0, ge=0, le=59)
+    lookback_days: int = Field(default=90, ge=1, le=365)
+
+
+class TrendSettings(BaseModel):
+    enabled: bool = True
+    collection_hour: int = Field(default=2, ge=0, le=23)
+    collection_minute: int = Field(default=30, ge=0, le=59)
+    lookback_days: int = Field(default=7, ge=1, le=30)
+    max_results_per_query: int = Field(default=12, ge=1, le=50)
+    popular_results: int = Field(default=50, ge=1, le=50)
+    external_weight: float = Field(default=0.40, ge=0, le=1)
+    channel_weight: float = Field(default=0.35, ge=0, le=1)
+    time_weight: float = Field(default=0.15, ge=0, le=1)
+    freshness_weight: float = Field(default=0.10, ge=0, le=1)
+    blocked_terms: list[str] = [
+        "official music video",
+        "lyrics",
+        "cover",
+        "remix",
+        "anime",
+        "game ost",
+        "歌詞",
+        "歌ってみた",
+        "アニメ",
+        "ゲーム",
+        "映画",
+        "ドラマ",
+        "政治",
+        "選挙",
+        "事件",
+        "事故",
+        "災害",
+    ]
+
+    def normalized_weights(self) -> tuple[float, float, float, float]:
+        values = (
+            self.external_weight,
+            self.channel_weight,
+            self.time_weight,
+            self.freshness_weight,
+        )
+        total = sum(values)
+        if total <= 0:
+            raise ValueError("At least one trend score weight must be positive")
+        return tuple(value / total for value in values)  # type: ignore[return-value]
+
+
+class DashboardSettings(BaseModel):
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = Field(default=8787, ge=1, le=65535)
+
+
+class PexelsSettings(BaseModel):
+    enabled: bool = True
+    api_key_env: str = "PEXELS_API_KEY"
+    min_width: int = Field(default=720, ge=320)
+    min_height: int = Field(default=1280, ge=480)
+    min_duration_sec: int = Field(default=8, ge=1, le=600)
+    max_duration_sec: int = Field(default=90, ge=1, le=3600)
+    max_download_mb: int = Field(default=150, ge=1, le=1000)
+    request_timeout_sec: float = Field(default=30, ge=1, le=300)
+    daily_downloads: int = Field(default=2, ge=0, le=20)
+
+
+class YouTubeSettings(BaseModel):
+    region: str = "JP"
+    category_id: int = 10
+    upload_privacy: str = "private"
+    contains_synthetic_media: bool = True
+    expected_channel_id: str | None = None
+    upload_poll_minutes: int = Field(default=15, ge=1, le=1440)
+    client_secret_file: str = "client_secret.json"
+    token_file: str = "token.json"
 
 
 class AppConfig(BaseModel):
@@ -79,9 +177,13 @@ class AppConfig(BaseModel):
     asset: AssetSettings = AssetSettings()
     storage: StorageSettings = StorageSettings()
     schedule: ScheduleSettings = ScheduleSettings()
+    analytics: AnalyticsSettings = AnalyticsSettings()
+    trends: TrendSettings = TrendSettings()
+    dashboard: DashboardSettings = DashboardSettings()
+    pexels: PexelsSettings = PexelsSettings()
     shorts: dict = {}
     long_mix: dict = {}
-    youtube: dict = {}
+    youtube: YouTubeSettings = YouTubeSettings()
 
     @property
     def timezone(self) -> ZoneInfo:

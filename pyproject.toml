@@ -39,6 +39,7 @@ dev = [
 bgm-factory-health = "bgm_factory.health:main"
 bgm-factory = "bgm_factory.cli:main"
 bgm-factory-worker = "bgm_factory.worker:main"
+bgm-factory-dashboard = "bgm_factory.dashboard:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bgm_factory"]

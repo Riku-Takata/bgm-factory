@@ -1,33 +1,30 @@
 # BGM Factory
 
-YouTube Shorts / 長尺Mix向けのBGM Assetを、Windows 11 + NVIDIA GPU上でローカル生成するシステムです。
+YouTube Shorts／長尺Mix向けのBGMをローカル生成・評価し、動画のPrivate投稿と実績収集を行うWindowsサーバーシステムです。
 
-現在は、Python環境、ACE-Step 1.5、FFmpeg、SQLiteジョブキュー、GPU ResourceGuard、BGM生成、音響解析、Hook/Loop/Qualityスコア、Asset採否判定、日次スケジューラまで実装しています。YouTubeへの自動投稿は無効です。
+映像はBGMに合う実写・環境クリップを選び、曲切替と同期して編集する設計です。詳細は [`docs/visual-video-pipeline.md`](docs/visual-video-pipeline.md) を参照してください。
 
-## サーバー上の配置
+## 配置
 
 | 用途 | パス |
 |---|---|
 | コード | `D:\HomeServer\apps\bgm-factory` |
-| Python/uv等のツール | `D:\HomeServer\tools` |
-| ACE-Step・モデル・DB・生成物 | `D:\HomeServer\data\app-data\bgm-factory` |
-| 実行設定・OAuth秘密情報 | `D:\HomeServer\config\bgm-factory` |
+| モデル・DB・生成物 | `D:\HomeServer\data\app-data\bgm-factory` |
+| 設定・OAuth秘密情報 | `D:\HomeServer\config\bgm-factory` |
 | ログ・PID・heartbeat | `D:\HomeServer\logs\bgm-factory` |
 
-仕様書の `D:\HomeServer\data\files\youtube-bgm` は参照専用で、実装や生成物を置きません。
+仕様書の `D:\HomeServer\data\files\youtube-bgm` は参照専用です。OAuthクライアントとトークンはリポジトリ外の `config\bgm-factory\secrets` に保存します。
 
-## 初期化
+## 起動・停止
 
-PowerShellで以下を実行します。
+HomeServerの通常モードと連動して、ACE-Step API、生成ワーカー、Analyticsダッシュボードを起動・停止します。
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-D:\HomeServer\apps\bgm-factory\scripts\install.ps1
+D:\HomeServer\scripts\start-normal.ps1
+D:\HomeServer\scripts\stop-normal.ps1
 ```
 
-ACE-Stepの依存関係は大きいため、初回同期には時間と数GBの通信が発生します。モデル本体はACE-Step API初回起動時にダウンロードされます。
-
-## 起動と確認
+単体操作:
 
 ```powershell
 D:\HomeServer\apps\bgm-factory\scripts\start.ps1
@@ -35,47 +32,117 @@ D:\HomeServer\apps\bgm-factory\scripts\healthcheck.ps1
 D:\HomeServer\apps\bgm-factory\scripts\stop.ps1
 ```
 
-HomeServer通常モードと連動して起動・停止します。
+ダッシュボードはサーバー内の `http://127.0.0.1:8787/` で開きます。
 
-```powershell
-D:\HomeServer\scripts\start-normal.ps1
-D:\HomeServer\scripts\stop-normal.ps1
-```
-
-Windows Task Schedulerへの登録は不要です。
-
-## ジョブ操作
-
-状態確認:
-
-```powershell
-D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe status
-```
-
-1件をキューへ追加:
+## BGM生成
 
 ```powershell
 D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe enqueue --theme summer_drive --count 1
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe status
 ```
 
-Workerを使わず次のジョブを1つ処理:
+生成候補は音量、BPM、フック、ループ、品質を解析し、基準を満たしたものだけをAsset化します。毎日03:15に生成し、04:00に一時ファイルを整理します。
+
+## YouTube接続
+
+OAuth認証と接続確認:
 
 ```powershell
-D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe run-once
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-auth
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-status
 ```
 
-通常はWorkerがキューを監視します。毎日03:15に40候補のJobを作成し、GPU条件を満たす場合のみ処理します。04:00にRejected Candidateと一時ファイルを整理します。
+レンダリング済み動画を登録し、1本だけPrivate投稿:
 
-## 初回に人が行う設定
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe video-register `
+  --file D:\path\video.mp4 --kind short --title "BGM Set #1" --tag bgm --tag shorts
 
-1. YouTube連携フェーズでGoogle CloudのOAuthクライアントを作り、`secrets\client_secret.json`を配置する。
-2. Private投稿の動作確認後にのみ自動アップロードを有効にする。
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-upload-next --confirm-private
+```
 
-## 方針
+### Visual Short rendering
 
-- ACE-Step APIは `127.0.0.1:8001` のみにbindします。
-- RTX 3060 Ti 8GB向けに2B turbo + 0.6B LM + PyTorch backend + CPU offloadを初期値とします。
-- GPU使用率35%超、モデル未ロード時の空きVRAM 6GB未満、モデルロード済み時の空きVRAM 1.2GB未満、温度78℃超では新しい生成を開始しません。
-- Accepted Assetは `data\app-data\bgm-factory\assets` に永久保存します。
-- Rejected Candidateは7日後に削除します。
-- `.env`、OAuth情報、モデル、生成音源、DB、ログはGit管理外です。
+`short-render` builds a 40-second, 1080x1920 Short from exactly five image, audio,
+and label sets. Each scene receives slow camera movement, a synchronized cut and
+fade, track labeling, and a supporting waveform. Add `--register` to place the
+validated output in the private YouTube upload queue. Upload remains a separate
+explicit step through `youtube-upload-next --confirm-private`.
+
+### Pexels stock-video cache
+
+Put `PEXELS_API_KEY` in `D:\HomeServer\config\bgm-factory\.env`, then cache one
+portrait clip for each configured scene query:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe pexels-fetch `
+  --theme summer_drive --limit 5
+```
+
+Clips are stored outside Git under `visual-assets\pexels`. Each clip has a
+`metadata.json` sidecar, and its Pexels ID, contributor, source page, license,
+download URL, dimensions, duration, and SHA-256 are also recorded in SQLite.
+
+### Daily public Shorts
+
+Production runs without paid generation APIs: ACE-Step creates music locally,
+Pexels supplies cached portrait footage, and FFmpeg renders the 9:16 video. The
+default server schedule selects three themes from the daily trend decision,
+enqueues three candidates for each selected theme at 03:15, renders three
+40-second Shorts at 06:00, 13:00, and 20:00, and uploads pending videos every
+15 minutes. Production
+uploads use the privacy setting in `youtube.upload_privacy`; the server runtime is
+configured for `public`. Existing QA uploads are not modified.
+
+The daily job is idempotent, uses persisted trend decisions (or deterministic
+rotation when trend collection fails), favors the least-used Pexels clips, adds
+complete Pexels credits to the description, and skips publishing when no audio
+candidate passes the configured technical thresholds. Run it manually with:
+
+Each Short keeps the multi-track format. Every scene carries its selected
+track's unique catalog name, so the on-screen song title changes at the same
+cut where the audio changes. Upload titles and descriptions also use those
+catalog names; promotional AI wording is omitted while YouTube's required
+synthetic-content disclosure remains enabled.
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe produce-daily-short `
+  --date 2026-08-12 --theme summer_drive
+```
+
+### YouTube trend-based theme selection
+
+At 02:30 the worker reads Japan's YouTube music `mostPopular` chart and performs
+eight bounded searches for the configured safe BGM theme packs. It rejects titles that
+contain blocked entertainment, lyrics, political, incident, or disaster terms;
+external titles are used only as ranking evidence and never copied into prompts.
+The selector combines views per hour, evidence freshness, this channel's 30-day
+retention/engagement performance, and the scheduled posting time. It persists raw
+snapshots, candidate scores, selected slots, sources, and reasons in SQLite. If
+the API is unavailable, it records and uses the deterministic theme rotation.
+
+Inspect or refresh a day's decision manually:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-trends `
+  --date 2026-08-12
+```
+
+動画はSHA-256で重複判定します。アップロード結果が不明な場合は `uncertain` で停止し、自動再投稿しません。`auto_upload: true` にすると15分ごとに登録済み動画を1本ずつPrivate投稿します。`auto_publish` は初期状態では無効です。
+
+## Analytics
+
+手動収集:
+
+```powershell
+D:\HomeServer\apps\bgm-factory\.venv\Scripts\bgm-factory.exe youtube-collect
+```
+
+毎日05:00にYouTube Data APIとYouTube Analytics APIから再生数、高評価、コメント、Engaged views、総再生時間、平均視聴時間、平均視聴率、共有、登録者増加をSQLiteへ保存します。
+
+## 安全設定
+
+- ACE-Step APIとダッシュボードは `127.0.0.1` のみにbindします。
+- YouTube投稿先チャンネルIDをサーバー設定に固定し、一致しない認証では投稿しません。
+- 初期投稿はPrivate限定です。
+- `.env`、OAuth情報、モデル、生成物、DB、ログはGit管理外です。

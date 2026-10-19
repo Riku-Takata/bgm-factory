@@ -1,5 +1,11 @@
 summer_drive:
   display_name: Summer Drive
+  video_queries:
+    - coastal road driving
+    - ocean sunlight
+    - palm tree road
+    - sunset highway
+    - neon city driving
   bpm: {min: 118, max: 132}
   energy: {min: 0.70, max: 0.95}
   keywords:
@@ -13,6 +19,12 @@ summer_drive:
 
 night_drive:
   display_name: Night Drive
+  video_queries:
+    - neon city driving
+    - highway at night
+    - rainy city road
+    - city lights reflection
+    - night traffic bokeh
   bpm: {min: 105, max: 128}
   energy: {min: 0.55, max: 0.85}
   keywords: [night drive, neon atmosphere, steady rhythm, warm synth bass]
@@ -20,8 +32,78 @@ night_drive:
 
 chill:
   display_name: Chill
+  video_queries:
+    - calm ocean
+    - forest sunlight
+    - slow clouds
+    - peaceful lake
+    - gentle waterfall
   bpm: {min: 75, max: 105}
   energy: {min: 0.30, max: 0.60}
   keywords: [soft groove, warm texture, relaxed, seamless instrumental loop]
   avoid: [vocals, aggressive drums, dramatic ending]
 
+focus_study:
+  display_name: Focus & Study
+  video_queries:
+    - focused desk workspace
+    - writing notes study
+    - laptop productivity
+    - library books sunlight
+    - minimal desk setup
+  bpm: {min: 82, max: 110}
+  energy: {min: 0.35, max: 0.62}
+  keywords: [steady focus groove, soft electronic texture, unobtrusive melody, productive]
+  avoid: [vocals, dramatic changes, aggressive drums, distracting lead]
+
+morning_fresh:
+  display_name: Fresh Morning
+  video_queries:
+    - sunrise morning window
+    - fresh coffee morning
+    - morning city sunlight
+    - green leaves sunlight
+    - bright breakfast table
+  bpm: {min: 98, max: 122}
+  energy: {min: 0.55, max: 0.78}
+  keywords: [fresh morning pop, light percussion, bright pluck, optimistic, clean]
+  avoid: [vocals, dark atmosphere, dramatic ending, heavy bass]
+
+rain_cafe:
+  display_name: Rainy Café
+  video_queries:
+    - rain cafe window
+    - coffee shop rain
+    - raindrops window cozy
+    - hot coffee close up
+    - rainy street lights
+  bpm: {min: 72, max: 98}
+  energy: {min: 0.25, max: 0.52}
+  keywords: [cozy cafe groove, rain atmosphere, warm electric piano, soft beat]
+  avoid: [vocals, aggressive drums, bright festival sound, dramatic ending]
+
+ambient_sleep:
+  display_name: Ambient Sleep
+  video_queries:
+    - moon clouds night
+    - calm stars sky
+    - peaceful bedroom night
+    - slow ocean night
+    - soft candle darkness
+  bpm: {min: 55, max: 82}
+  energy: {min: 0.10, max: 0.35}
+  keywords: [calm ambient pad, gentle pulse, peaceful, spacious, sleep atmosphere]
+  avoid: [vocals, strong drums, sudden changes, dramatic melody, loud transients]
+
+workout_upbeat:
+  display_name: Workout Energy
+  video_queries:
+    - running workout training
+    - gym exercise close up
+    - outdoor fitness movement
+    - cycling training
+    - athletic shoes running
+  bpm: {min: 124, max: 142}
+  energy: {min: 0.78, max: 0.98}
+  keywords: [upbeat electronic workout, driving drums, energetic bass, motivating hook]
+  avoid: [vocals, slow intro, ambient breakdown, dramatic ending]

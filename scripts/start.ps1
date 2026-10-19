@@ -11,6 +11,7 @@ Assert-UvInstalled
 Assert-AppEnvironmentInstalled
 
 $workerPid = Join-Path $script:LogRoot "worker.pid"
+$dashboardPid = Join-Path $script:LogRoot "dashboard.pid"
 $acePid = Join-Path $script:LogRoot "ace-step.pid"
 
 if (-not $WorkerOnly) {
@@ -51,6 +52,22 @@ if (-not (Test-ProcessFromPidFile -PidFile $workerPid)) {
 }
 else {
     Write-Host "BGM Factory worker is already running."
+}
+
+if (-not (Test-ProcessFromPidFile -PidFile $dashboardPid)) {
+    $dashboardOut = Join-Path $script:LogRoot "dashboard.stdout.log"
+    $dashboardErr = Join-Path $script:LogRoot "dashboard.stderr.log"
+    $process = Start-Process -FilePath $script:AppDashboard `
+        -WorkingDirectory $script:AppRoot `
+        -RedirectStandardOutput $dashboardOut `
+        -RedirectStandardError $dashboardErr `
+        -WindowStyle Hidden `
+        -PassThru
+    Set-Content -LiteralPath $dashboardPid -Value $process.Id -NoNewline
+    Write-Host "BGM Factory dashboard started (PID $($process.Id))."
+}
+else {
+    Write-Host "BGM Factory dashboard is already running."
 }
 
 if (-not $SkipHealthCheck) {
